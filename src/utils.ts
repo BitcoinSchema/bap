@@ -1,5 +1,5 @@
-import bsv from 'bsv';
-import {PathPrefix} from "./interface";
+import randomBytes from "randombytes";
+import type {PathPrefix} from "./interface";
 
 export const Utils = {
   /**
@@ -9,7 +9,7 @@ export const Utils = {
    * @returns {string}
    */
   hexEncode(string: string) {
-    return '0x' + Buffer.from(string).toString('hex');
+    return `0x${Buffer.from(string).toString('hex')}`;
   },
 
   /**
@@ -29,7 +29,7 @@ export const Utils = {
    * @returns {string}
    */
   getRandomString(length = 32) {
-    return bsv.crypto.Random.getRandomBuffer(length).toString('hex');
+    return randomBytes(length).toString('hex');
   },
 
   /**
@@ -38,7 +38,7 @@ export const Utils = {
    * @param value any
    * @returns {boolean}
    */
-  isHex(value: any) {
+  isHex(value: string): boolean {
     if (typeof value !== 'string') {
       return false;
     }
@@ -56,12 +56,15 @@ export const Utils = {
     // "m/0/0/1"
     let signingPath = 'm';
     const signingHex = hexString.match(/.{1,8}/g);
+    if (!signingHex) {
+      throw new Error('Invalid hex string');
+    }
     const maxNumber = 2147483648 - 1; // 0x80000000
-    signingHex?.forEach((hexNumber) => {
-      let number = Number('0x' + hexNumber);
+    for (const hexNumber of signingHex) {
+      let number = Number(`0x${hexNumber}`);
       if (number > maxNumber) number -= maxNumber;
       signingPath += `/${number}${(hardened ? "'" : '')}`;
-    });
+    }
 
     return signingPath;
   },
@@ -83,7 +86,7 @@ export const Utils = {
 
     const nextPath = (Number(secondToLastPart.replace(/[^0-9]/g, '')) + 1).toString();
     pathValues[pathValues.length - 2] = nextPath + (hardened ? '\'' : '');
-    pathValues[pathValues.length - 1] = '0' + (hardened ? '\'' : '');
+    pathValues[pathValues.length - 1] = `0${hardened ? '\'' : ''}`;
 
     return pathValues.join('/') as PathPrefix;
   },

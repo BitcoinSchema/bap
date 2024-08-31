@@ -1,9 +1,9 @@
-import bsv from 'bsv';
+import type { HD } from '@bsv/sdk';
 
 export const BAP_POA = class {
-  #HDPrivateKey: bsv.HDPrivateKey;
+  #HDPrivateKey: HD;
 
-  constructor(HDPrivateKey: bsv.HDPrivateKey) {
+  constructor(HDPrivateKey: HD) {
     this.#HDPrivateKey = HDPrivateKey;
   }
 };

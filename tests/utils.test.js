@@ -3,6 +3,7 @@ import {
   expect,
   beforeEach,
   afterEach,
+  it,
   test,
 } from '@jest/globals';
 import { Utils } from '../src/utils';
