@@ -62,13 +62,12 @@ const cipherText = identity.encrypt('Hello World!');
 const text = identity.decrypt(cipherText);
 ```
 
-The encryption uses `ECIES` from the `bsv` library:
+The encryption uses `ECIES` from the `@bsv/sdk` library:
 ```javascript
-import ECIES from 'bsv/ecies';
+import { ECIES, Utils } from '@bsv/sdk'
+const { toArray, toBase64 } = Utils;
 
-const ecies = new ECIES()
-ecies.publicKey(publicKey);
-return ecies.encrypt(stringData).toString('base64');
+return toBase64(bitcoreEncrypt(toArray(stringData)));
 ```
 
 Other examples:
