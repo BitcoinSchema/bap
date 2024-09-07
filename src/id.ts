@@ -1,4 +1,4 @@
-import { BSM, Hash, type HD, ECIES, PublicKey } from "@bsv/sdk";
+import { BSM, Hash, type HD, ECIES, PublicKey, BigNumber } from "@bsv/sdk";
 import {
 	MAX_INT,
 	SIGNING_PATH_PREFIX,
@@ -8,11 +8,15 @@ import {
 	ENCRYPTION_PATH,
 } from "./constants";
 import { Utils } from "./utils";
-import type { Identity } from "./interface";
+import type {
+	Identity,
+	IdentityAttribute,
+	IdentityAttributes,
+} from "./interface";
 import { Utils as BSVUtils } from "@bsv/sdk";
 const { toArray, toHex, toBase58, toUTF8, toBase64 } = BSVUtils;
-const { bitcoreDecrypt, bitcoreEncrypt } = ECIES;
-
+const { electrumDecrypt, electrumEncrypt } = ECIES;
+const { magicHash } = BSM;
 /**
  * BAP_ID class
  *
@@ -34,11 +38,11 @@ class BAP_ID {
 
 	rootAddress: string;
 	identityKey: string;
-	identityAttributes: { [key: string]: any };
+	identityAttributes: IdentityAttributes;
 
 	constructor(
 		HDPrivateKey: HD,
-		identityAttributes: { [key: string]: any } = {},
+		identityAttributes: IdentityAttributes = {},
 		idSeed = "",
 	) {
 		this.#idSeed = idSeed;
@@ -63,8 +67,8 @@ class BAP_ID {
 		this.identityKey = this.deriveIdentityKey(this.rootAddress);
 
 		// unlink the object
-		identityAttributes = { ...identityAttributes };
-		this.identityAttributes = this.parseAttributes(identityAttributes);
+		const attributes = { ...identityAttributes };
+		this.identityAttributes = this.parseAttributes(attributes);
 	}
 
 	set BAP_SERVER(bapServer) {
@@ -96,9 +100,9 @@ class BAP_ID {
 	 * @param identityAttributes
 	 * @returns {{}}
 	 */
-	parseAttributes(identityAttributes: { [key: string]: any } | string): {
-		[key: string]: any;
-	} {
+	parseAttributes(
+		identityAttributes: IdentityAttributes | string,
+	): IdentityAttributes {
 		if (typeof identityAttributes === "string") {
 			return this.parseStringUrns(identityAttributes);
 		}
@@ -121,8 +125,8 @@ class BAP_ID {
 	 *
 	 * @param urnIdentityAttributes
 	 */
-	parseStringUrns(urnIdentityAttributes: string): { [key: string]: any } {
-		const identityAttributes: { [key: string]: any } = {};
+	parseStringUrns(urnIdentityAttributes: string): IdentityAttributes {
+		const identityAttributes: IdentityAttributes = {};
 		// avoid forEach
 
 		const attributesRaw = urnIdentityAttributes
@@ -166,7 +170,7 @@ class BAP_ID {
 	 *
 	 * @returns {*}
 	 */
-	getAttributes(): { [key: string]: any } {
+	getAttributes(): IdentityAttributes {
 		return this.identityAttributes;
 	}
 
@@ -176,7 +180,7 @@ class BAP_ID {
 	 * @param attributeName
 	 * @returns {{}|null}
 	 */
-	getAttribute(attributeName: string): any {
+	getAttribute(attributeName: string): IdentityAttribute | null {
 		if (this.identityAttributes[attributeName]) {
 			return this.identityAttributes[attributeName];
 		}
@@ -253,13 +257,14 @@ class BAP_ID {
 	 * @param nonce
 	 */
 	addAttribute(attributeName: string, value: any, nonce = ""): void {
+		let nonceToUse = nonce;
 		if (!nonce) {
-			nonce = Utils.getRandomString();
+			nonceToUse = Utils.getRandomString();
 		}
 
 		this.identityAttributes[attributeName] = {
 			value,
-			nonce,
+			nonce: nonceToUse,
 		};
 	}
 
@@ -269,27 +274,28 @@ class BAP_ID {
 	 *
 	 * @param path The second path of the signing path in the format [0-9]{0,9}/[0-9]{0,9}/[0-9]{0,9}
 	 */
-	set rootPath(path) {
+	set rootPath(path: string) {
 		if (this.#HDPrivateKey) {
+			let pathToUse = path;
 			if (path.split("/").length < 5) {
-				path = `${SIGNING_PATH_PREFIX}${path}`;
+				pathToUse = `${SIGNING_PATH_PREFIX}${path}`;
 			}
 
-			if (!this.validatePath(path)) {
-				throw new Error(`invalid signing path given ${path}`);
+			if (!this.validatePath(pathToUse)) {
+				throw new Error(`invalid signing path given ${pathToUse}`);
 			}
 
-			this.#rootPath = path;
+			this.#rootPath = pathToUse;
 
-			const derivedChild = this.#HDPrivateKey.derive(path);
+			const derivedChild = this.#HDPrivateKey.derive(pathToUse);
 			this.rootAddress = derivedChild.pubKey.toAddress();
 			// Identity keys should be derivatives of the root address - this allows checking
 			// of the creation transaction
 			this.identityKey = this.deriveIdentityKey(this.rootAddress);
 
 			// we also set this previousPath / currentPath to the root as we seem to be (re)setting this ID
-			this.#previousPath = path;
-			this.#currentPath = path;
+			this.#previousPath = pathToUse;
+			this.#currentPath = pathToUse;
 		}
 	}
 
@@ -308,16 +314,17 @@ class BAP_ID {
 	 * @param path The second path of the signing path in the format [0-9]{0,9}/[0-9]{0,9}/[0-9]{0,9}
 	 */
 	set currentPath(path) {
+		let pathToUse = path;
 		if (path.split("/").length < 5) {
-			path = `${SIGNING_PATH_PREFIX}${path}`;
+			pathToUse = `${SIGNING_PATH_PREFIX}${path}`;
 		}
 
-		if (!this.validatePath(path)) {
+		if (!this.validatePath(pathToUse)) {
 			throw new Error("invalid signing path given");
 		}
 
 		this.#previousPath = this.#currentPath;
-		this.#currentPath = path;
+		this.#currentPath = pathToUse;
 	}
 
 	get currentPath(): string {
@@ -405,9 +412,10 @@ class BAP_ID {
 			Buffer.from(this.getCurrentAddress()).toString("hex"),
 		];
 
-		previousPath = previousPath || this.#previousPath;
-
-		return this.signOpReturnWithAIP(opReturn, previousPath);
+		return this.signOpReturnWithAIP(
+			opReturn,
+			previousPath || this.#previousPath,
+		);
 	}
 
 	/**
@@ -462,35 +470,22 @@ class BAP_ID {
 		const pubKey = counterPartyPublicKey
 			? PublicKey.fromString(counterPartyPublicKey)
 			: publicKey;
-		return toBase64(bitcoreEncrypt(toArray(stringData), pubKey));
+    // @ts-ignore - remove this when SDK is updated
+		return toBase64(electrumEncrypt(toArray(stringData), pubKey, null));
 	}
 
 	/**
 	 * Decrypt the given ciphertext with the identity encryption key
 	 * @param ciphertext
-	 * @param counterPartyPublicKey Optional public key of the counterparty
 	 */
 	decrypt(ciphertext: string, counterPartyPublicKey?: string): string {
 		const HDPrivateKey = this.#HDPrivateKey.derive(this.#rootPath);
 		const encryptionKey = HDPrivateKey.derive(ENCRYPTION_PATH).privKey;
-		// const ecies = new ECIES();
-
-		// if (counterPartyPublicKey) {
-		//   return toUTF8(bitcoreDecrypt(toArray(Buffer.from(ciphertext, 'base64'), 'base64'), encryptionKey))
-		// }
-
-		// TODO: It seems the counterPartyPublicKey is not being used here
-		return toUTF8(
-			bitcoreDecrypt(
-				toArray(Buffer.from(ciphertext, "base64"), "base64"),
-				encryptionKey,
-			),
-		);
-		// ecies.privateKey(encryptionKey);
-		// if (counterPartyPublicKey) {
-		//   ecies.publicKey(counterPartyPublicKey);
-		// }
-		// return ecies.decrypt(Buffer.from(ciphertext, 'base64')).toString();
+    let pubKey = undefined
+    if (counterPartyPublicKey) {
+      pubKey = PublicKey.fromString(counterPartyPublicKey);
+    }
+		return toUTF8(electrumDecrypt(toArray(ciphertext, "base64"), encryptionKey, pubKey));
 	}
 
 	/**
@@ -507,49 +502,25 @@ class BAP_ID {
 	): string {
 		const encryptionKey = this.getEncryptionPrivateKeyWithSeed(seed);
 		const publicKey = encryptionKey.toPublicKey();
-
-		// const ecies = new ECIES();
-		if (counterPartyPublicKey) {
-			// ecies.privateKey(encryptionKey);
-			// ecies.publicKey(counterPartyPublicKey);
-			return toBase64(
-				bitcoreEncrypt(
-					toArray(stringData),
-					PublicKey.fromString(counterPartyPublicKey),
-				),
-			);
-		}
-		// ecies.publicKey(publicKey);
-		return toBase64(bitcoreEncrypt(toArray(stringData), publicKey));
-		// return ecies.encrypt(stringData).toString('base64');
+		const pubKey = counterPartyPublicKey
+			? PublicKey.fromString(counterPartyPublicKey)
+			: publicKey;
+		return toBase64(electrumEncrypt(toArray(stringData), pubKey, encryptionKey));
 	}
 
 	/**
 	 * Decrypt the given ciphertext with the identity encryption key
 	 * @param ciphertext
 	 * @param seed String seed
-	 * @param counterPartyPublicKey Public key of the counterparty
+	//  * @param counterPartyPublicKey Public key of the counterparty
 	 */
-	decryptWithSeed(
-		ciphertext: string,
-		seed: string,
-		counterPartyPublicKey?: string,
-	): string {
+	decryptWithSeed(ciphertext: string, seed: string, counterPartyPublicKey?: string): string {
 		const encryptionKey = this.getEncryptionPrivateKeyWithSeed(seed);
-		// const ecies = new ECIES();
-		// ecies.privateKey(encryptionKey);
-		// if (counterPartyPublicKey) {
-		// ecies.publicKey(counterPartyPublicKey);
-		// TODOL: It seems the counterPartyPublicKey is not being used here
-		return toUTF8(
-			bitcoreDecrypt(
-				toArray(Buffer.from(ciphertext, "base64"), "base64"),
-				encryptionKey,
-			),
-		);
-		// }
-
-		// return ecies.decrypt(Buffer.from(ciphertext, 'base64')).toString();
+    let pubKey = undefined
+    if (counterPartyPublicKey) {
+      pubKey = PublicKey.fromString(counterPartyPublicKey);
+    }
+		return toUTF8(electrumDecrypt(toArray(ciphertext, "base64"), encryptionKey, pubKey));
 	}
 
 	private getEncryptionPrivateKeyWithSeed(seed: string) {
@@ -602,11 +573,19 @@ class BAP_ID {
 			msg = message;
 		}
 
-		signingPath = signingPath || this.#currentPath;
-		const childPk = this.#HDPrivateKey.derive(signingPath).privKey;
+		const pathToUse = signingPath || this.#currentPath;
+		const childPk = this.#HDPrivateKey.derive(pathToUse).privKey;
 		const address = childPk.toAddress();
+
+    // Needed to calculate the recovery factor
+    const dummySig = BSM.sign(toArray(message), childPk);
+		const h = new BigNumber(magicHash(toArray(message, "utf8")));
+		const r = dummySig.CalculateRecoveryFactor(
+			childPk.toPublicKey(),
+			h,
+		);
 		const signature = BSM.sign(toArray(msg), childPk).toCompact(
-			0,
+			r,
 			true,
 			"base64",
 		) as string;
@@ -636,10 +615,19 @@ class BAP_ID {
 		const HDPrivateKey = this.#HDPrivateKey.derive(this.#rootPath);
 		const derivedChild = HDPrivateKey.derive(path);
 		const address = derivedChild.privKey.toPublicKey().toAddress();
+
+		const dummySig = BSM.sign(toArray(message), derivedChild.privKey);
+
+		const h = new BigNumber(magicHash(toArray(message, "utf8")));
+		const r = dummySig.CalculateRecoveryFactor(
+			derivedChild.privKey.toPublicKey(),
+			h,
+		);
+
 		const signature = BSM.sign(
 			toArray(Buffer.from(message)),
 			derivedChild.privKey,
-		).toCompact(0, true, "base64") as string;
+		).toCompact(r, true, "base64") as string;
 
 		return { address, signature };
 	}

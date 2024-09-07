@@ -1,5 +1,4 @@
 import { BigNumber, BSM, HD, type PublicKey, Signature, ECIES } from "@bsv/sdk";
-import "node-fetch";
 
 import { Utils } from "./utils";
 import { BAP_ID } from "./id";
@@ -10,10 +9,13 @@ import {
 	BAP_BITCOM_ADDRESS_HEX,
 	AIP_BITCOM_ADDRESS,
 } from "./constants";
-import type { Attestation, Identity, PathPrefix } from "./interface";
+import type { Attestation, Identity, IdentityAttributes, PathPrefix } from "./interface";
 import { Utils as BSVUtils } from "@bsv/sdk";
+import { PrivateKey } from "@bsv/sdk";
 const { toArray, toUTF8, toBase64 } = BSVUtils;
-const { bitcoreDecrypt, bitcoreEncrypt } = ECIES;
+const { electrumEncrypt, electrumDecrypt } = ECIES;
+
+type Identities = { lastIdPath: string; ids: Identity[] };
 
 /**
  * BAP class
@@ -74,10 +76,9 @@ export const BAP = class {
 
 	set BAP_SERVER(bapServer) {
 		this.#BAP_SERVER = bapServer;
-		Object.keys(this.#ids).forEach((key) => {
-			// @ts-ignore - does not recognize private fields that can be set
+		for (const key of Object.keys(this.#ids)) {
 			this.#ids[key].BAP_SERVER = bapServer;
-		});
+		}
 	}
 
 	get BAP_SERVER(): string {
@@ -86,10 +87,10 @@ export const BAP = class {
 
 	set BAP_TOKEN(token) {
 		this.#BAP_TOKEN = token;
-		Object.keys(this.#ids).forEach((key) => {
+		for (const key of Object.keys(this.#ids)) {
 			// @ts-ignore - does not recognize private fields that can be set
 			this.#ids[key].BAP_TOKEN = token;
-		});
+		}
 	}
 
 	get BAP_TOKEN(): string {
@@ -133,11 +134,14 @@ export const BAP = class {
 	 * @param idSeed
 	 * @returns {*}
 	 */
-	newId(path = "", identityAttributes: any = {}, idSeed = ""): BAP_ID {
+	newId(path?: string, identityAttributes: IdentityAttributes = {}, idSeed = ""): BAP_ID {
+    let pathToUse: string;
 		if (!path) {
 			// get next usable path for this key
-			path = this.getNextValidPath();
-		}
+			pathToUse = this.getNextValidPath();
+		} else {
+      pathToUse = path;
+    }
 
 		const newIdentity = new BAP_ID(
 			this.#HDPrivateKey,
@@ -147,12 +151,12 @@ export const BAP = class {
 		newIdentity.BAP_SERVER = this.#BAP_SERVER;
 		newIdentity.BAP_TOKEN = this.#BAP_TOKEN;
 
-		newIdentity.rootPath = path;
-		newIdentity.currentPath = Utils.getNextPath(path);
+		newIdentity.rootPath = pathToUse;
+		newIdentity.currentPath = Utils.getNextPath(pathToUse);
 
 		const idKey = newIdentity.getIdentityKey();
 		this.#ids[idKey] = newIdentity;
-		this.#lastIdPath = path;
+		this.#lastIdPath = pathToUse;
 
 		return this.#ids[idKey];
 	}
@@ -215,37 +219,59 @@ export const BAP = class {
 	 * @param idData Array of ids that have been exported
 	 * @param encrypted Whether the data should be treated as being encrypted (default true)
 	 */
-	importIds(idData: any, encrypted = true): void {
-		if (encrypted) {
-			// we first need to decrypt the ids array using ECIES
-
-			const derivedChild = this.#HDPrivateKey.derive(ENCRYPTION_PATH);
-			const decrypted = toUTF8(bitcoreDecrypt(
-				toArray(
-					Buffer.from(idData, Utils.isHex(idData) ? "hex" : "base64").toString(
-						"hex",
-					),
-					"hex",
-				),
-				derivedChild.privKey,
-			));
-			idData = JSON.parse(decrypted) as Identity[];
+	importIds(idData: Identities | string, encrypted = true): void {
+		if (encrypted && typeof idData === "string") {
+			this.importEncryptedIds(idData);
+			return;
 		}
+    const identity = idData as Identities
+    if (!identity.lastIdPath) {
+      throw new Error("ID cannot be imported as it is not complete");
+    }
 
-		let oldFormatImport = false;
-		if (!idData.ids) {
-			// old format id container
-			oldFormatImport = true;
-			idData = {
-				lastIdPath: "",
-				ids: idData,
-			};
-		}
-
-		for (const id of idData.ids as Identity[]) {
+    if (!identity.ids) {
+      throw new Error(`ID data is not in the correct format: ${idData}`);
+    }
+    
+		let lastIdPath = (idData as Identities).lastIdPath;
+		for (const id of identity.ids) {
 			if (!id.identityKey || !id.identityAttributes || !id.rootAddress) {
 				throw new Error("ID cannot be imported as it is not complete");
 			}
+			const importId = new BAP_ID(this.#HDPrivateKey, {}, id.idSeed);
+			importId.BAP_SERVER = this.#BAP_SERVER;
+			importId.BAP_TOKEN = this.#BAP_TOKEN;
+			importId.import(id);
+      if (lastIdPath === "") {
+        lastIdPath = importId.currentPath;
+      }
+
+			this.checkIdBelongs(importId);
+			this.#ids[importId.getIdentityKey()] = importId;
+		}
+
+		this.#lastIdPath = lastIdPath;
+	}
+  
+	importEncryptedIds(idData: string): void {
+		// decrypt the ids array using ECIES
+    const decrypted = this.decrypt(idData);
+		const ids = JSON.parse(decrypted) as Identities;
+    
+    const isOldFormat = Array.isArray(ids)
+    if (isOldFormat) {
+      console.log("Importing old format:\n", ids)
+      this.importOldIds(ids)
+      return
+    }
+    if (typeof ids !== "object") {
+      throw new Error("decrypted, but found unrecognized identities format")
+    }
+		this.importIds(ids, false);
+	}
+
+	importOldIds(idData: Identity[]): void {
+		for (const id of idData) {
 			const importId = new BAP_ID(this.#HDPrivateKey, {}, id.idSeed);
 			importId.BAP_SERVER = this.#BAP_SERVER;
 			importId.BAP_TOKEN = this.#BAP_TOKEN;
@@ -255,15 +281,10 @@ export const BAP = class {
 
 			this.#ids[importId.getIdentityKey()] = importId;
 
-			if (oldFormatImport) {
-				// overwrite with the last value on this array
-				idData.lastIdPath = importId.currentPath;
-			}
+			// overwrite with the last value on this array
+			this.#lastIdPath = importId.currentPath;
 		}
-
-		this.#lastIdPath = idData.lastIdPath;
 	}
-
 	/**
 	 * Export all the IDs of this instance for external storage
 	 *
@@ -272,8 +293,8 @@ export const BAP = class {
 	 * @param encrypted Whether the data should be encrypted (default true)
 	 * @returns {[]|*}
 	 */
-	exportIds(encrypted = true): any {
-		const idData = {
+	exportIds(encrypted = true): Identities | string {
+		const idData: Identities = {
 			lastIdPath: this.#lastIdPath,
 			ids: [] as Identity[],
 		};
@@ -283,11 +304,10 @@ export const BAP = class {
 		}
 
 		if (encrypted) {
-			const derivedChild = this.#HDPrivateKey.derive(ENCRYPTION_PATH);
-			return toBase64(bitcoreEncrypt(toArray(JSON.stringify(idData), 'utf8'), derivedChild.pubKey))
+			return this.encrypt(JSON.stringify(idData));
 		}
 
-		return idData;
+		return idData 
 	}
 
 	/**
@@ -297,9 +317,11 @@ export const BAP = class {
 	 * @returns {string}
 	 */
 	encrypt(string: string): string {
-
 		const derivedChild = this.#HDPrivateKey.derive(ENCRYPTION_PATH);
-		return toBase64(bitcoreEncrypt(toArray(string, 'utf8'), derivedChild.pubKey))
+		return toBase64(
+        // @ts-ignore - you can remove the null when this is merged https://github.com/bitcoin-sv/ts-sdk/pull/123
+			electrumEncrypt(toArray(string), derivedChild.pubKey, null),
+		);
 	}
 
 	/**
@@ -310,7 +332,9 @@ export const BAP = class {
 	 */
 	decrypt(string: string): string {
 		const derivedChild = this.#HDPrivateKey.derive(ENCRYPTION_PATH);
-		return toUTF8(bitcoreDecrypt(toArray(string, 'base64'), derivedChild.privKey));
+		return toUTF8(
+			electrumDecrypt(toArray(string, "base64"), derivedChild.privKey),
+		);
 	}
 
 	/**

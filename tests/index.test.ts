@@ -7,6 +7,7 @@ import { HD } from "@bsv/sdk";
 import { HDPrivateKey, HDPublicKey } from "./data/keys";
 import fullId from "./data/ids.json";
 import oldFullId from "./data/old-ids.json";
+import { Identity } from "../src/interface";
 
 const testBAPInstance = (bap) => {
 	// TODO ....
@@ -25,6 +26,7 @@ describe("bap", () => {
 
 	test("init without key", () => {
 		expect(() => {
+      // @ts-ignore - Testing invalid input
 			new BAP();
 		}).toThrow();
 	});
@@ -49,8 +51,8 @@ describe("bap", () => {
 		const bap = new BAP(HDPrivateKey);
 		const id = bap.newId();
 
-		expect(bap.BAP_SERVER).toEqual("https://bap.network/api/v1");
-		expect(id.BAP_SERVER).toEqual("https://bap.network/api/v1");
+		expect(bap.BAP_SERVER).toEqual("https://api.sigmaidentity.com/api/v1");
+		expect(id.BAP_SERVER).toEqual("https://api.sigmaidentity.com/api/v1");
 
 		const newServer = "https://bapdev.legallychained.com/";
 		bap.BAP_SERVER = newServer;
@@ -90,20 +92,22 @@ describe("bap", () => {
 		expect(bap.listIds()).toStrictEqual([identityKey]);
 
 		const importedId = bap.getId(identityKey);
+    expect(importedId).not.toBeNull();
 		expect(importedId).toBeInstanceOf(BAP_ID);
-		expect(importedId.getIdentityKey()).toBe(identityKey);
+		expect(importedId?.getIdentityKey()).toBe(identityKey);
 	});
 
 	test("import OLD full ID", () => {
 		const bap = new BAP(HDPrivateKey);
-		bap.importIds(oldFullId, false);
+		bap.importOldIds(oldFullId);
 		testBAPInstance(bap);
 
 		expect(bap.listIds()).toStrictEqual([identityKey]);
 
 		const importedId = bap.getId(identityKey);
+    expect(importedId).not.toBeNull();
 		expect(importedId).toBeInstanceOf(BAP_ID);
-		expect(importedId.getIdentityKey()).toBe(identityKey);
+		expect(importedId?.getIdentityKey()).toBe(identityKey);
 	});
 
 	test("export full ID", () => {
@@ -129,7 +133,7 @@ describe("bap", () => {
 
 		const importedId = bap2.getId(identityKey);
 		expect(importedId).toBeInstanceOf(BAP_ID);
-		expect(importedId.getIdentityKey()).toBe(identityKey);
+		expect(importedId?.getIdentityKey()).toBe(identityKey);
 	});
 
 	test("checkIdBelongs", () => {
@@ -158,9 +162,10 @@ describe("bap", () => {
 		bap.setId(newId);
 
 		expect(bap.getId("test")).toEqual(null);
-		expect(bap.getId(idKey).identityKey).toStrictEqual(idKey);
+		expect(bap.getId(idKey)?.identityKey).toStrictEqual(idKey);
 
 		expect(() => {
+      // @ts-ignore - Testing invalid input
 			bap.setId({});
 		}).toThrow();
 	});
@@ -223,11 +228,12 @@ describe("bap", () => {
 		fullBap.importIds(fullId, false);
 
 		const bapId = fullBap.getId(identityKey);
-		expect(bapId.getAttribute("name").value).toBe("John Doe");
-		expect(bapId.getAttribute("name").nonce).toBe(
+    expect(bapId).not.toBeNull();
+		expect(bapId?.getAttribute("name")?.value).toBe("John Doe");
+		expect(bapId?.getAttribute("name")?.nonce).toBe(
 			"e2c6fb4063cc04af58935737eaffc938011dff546d47b7fbb18ed346f8c4d4fa",
 		);
-		expect(bapId.getAttributeUrn("name")).toBe(
+		expect(bapId?.getAttributeUrn("name")).toBe(
 			"urn:bap:id:name:John Doe:e2c6fb4063cc04af58935737eaffc938011dff546d47b7fbb18ed346f8c4d4fa",
 		);
 	});
@@ -244,13 +250,15 @@ describe("bap", () => {
 			},
 		});
 		const attestationHash = userId.getAttestationHash("name");
+    expect(attestationHash).not.toBeNull();
 		expect(attestationHash).toBe(
 			"d6cbf280ad7515e549c7b154a02555fff3eeb05c6b245039813d39d3c0397b4a",
 		);
 
 		// create a signing transaction of the user's hash with our own identity key
 		const transaction = bap.signAttestationWithAIP(
-			attestationHash,
+			// biome-ignore lint/style/noNonNullAssertion: gauranteed to be non-null
+			attestationHash!,
 			identityKey,
 		);
 		expect(transaction.length).toBe(10);
@@ -270,6 +278,7 @@ describe("bap", () => {
 			},
 		});
 		const attestationHash = userId.getAttestationHash("name");
+    expect(attestationHash).not.toBeNull();
 		expect(attestationHash).toBe(
 			"d6cbf280ad7515e549c7b154a02555fff3eeb05c6b245039813d39d3c0397b4a",
 		);
@@ -277,7 +286,8 @@ describe("bap", () => {
 		// create a signing transaction of the user's hash with our own identity key
 		const dataString = "This is a test string to add to the attestation";
 		const transaction = bap.signAttestationWithAIP(
-			attestationHash,
+      // biome-ignore lint/style/noNonNullAssertion: gauranteed to be non-null
+			attestationHash!,
 			identityKey,
 			0,
 			dataString,

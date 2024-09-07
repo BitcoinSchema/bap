@@ -5,13 +5,21 @@
       "dom.iterable",
       "esnext"
     ],
-    "target": "es6",
-    "module": "esnext",
-    "moduleResolution": "node",
-    "strict": true,
-    "esModuleInterop": true,
+    "target": "ESNext",
+    "module": "ESNext",
     "declaration": true,
-    "declarationDir": "dts/",
-    "emitDeclarationOnly": true
-  }
+    "outDir": "./dist",
+    "noEmit": false,
+    "strict": true,
+    "moduleResolution": "Bundler",
+    "typeRoots": [
+      "./node_modules/@types",
+      "./types"
+    ],
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+  },
+  "exclude": ["node_modules", "./dist", "src/**/*.test.ts", "jest.config.ts"],
+  "include": ["src/**/*"],
 }
