@@ -9,13 +9,15 @@ import {
 	BAP_BITCOM_ADDRESS_HEX,
 	AIP_BITCOM_ADDRESS,
 } from "./constants";
+import { type APIFetcher, apiFetcher } from "./api";
 import type { Attestation, Identity, IdentityAttributes, PathPrefix } from "./interface";
 import { Utils as BSVUtils } from "@bsv/sdk";
-import { PrivateKey } from "@bsv/sdk";
+import type { AttestationValidResponse, GetAttestationResponse, GetIdentityByAddressResponse } from "./apiTypes";
 const { toArray, toUTF8, toBase64 } = BSVUtils;
 const { electrumEncrypt, electrumDecrypt } = ECIES;
 
 type Identities = { lastIdPath: string; ids: Identity[] };
+
 
 /**
  * BAP class
@@ -24,14 +26,17 @@ type Identities = { lastIdPath: string; ids: Identity[] };
  *
  * @param HDPrivateKey
  */
-export const BAP = class {
+export class BAP {
 	#HDPrivateKey;
 	#ids: { [key: string]: BAP_ID } = {};
 	#BAP_SERVER = BAP_SERVER;
 	#BAP_TOKEN = "";
 	#lastIdPath = "";
+  getApiData: APIFetcher;
 
-	constructor(HDPrivateKey: string, token = "") {
+
+  
+	constructor(HDPrivateKey: string, token = "", server = "") {
 		if (!HDPrivateKey) {
 			throw new Error("No HDPrivateKey given");
 		}
@@ -40,6 +45,12 @@ export const BAP = class {
 		if (token) {
 			this.#BAP_TOKEN = token;
 		}
+
+    if (server) {
+      this.#BAP_SERVER = server;
+    }
+
+    this.getApiData = apiFetcher(this.#BAP_SERVER, this.#BAP_TOKEN);
 	}
 
 	get lastIdPath(): string {
@@ -76,7 +87,7 @@ export const BAP = class {
 
 	set BAP_SERVER(bapServer) {
 		this.#BAP_SERVER = bapServer;
-		for (const key of Object.keys(this.#ids)) {
+		for (const key in this.#ids) {
 			this.#ids[key].BAP_SERVER = bapServer;
 		}
 	}
@@ -87,7 +98,7 @@ export const BAP = class {
 
 	set BAP_TOKEN(token) {
 		this.#BAP_TOKEN = token;
-		for (const key of Object.keys(this.#ids)) {
+		for (const key in this.#ids) {
 			// @ts-ignore - does not recognize private fields that can be set
 			this.#ids[key].BAP_TOKEN = token;
 		}
@@ -285,6 +296,8 @@ export const BAP = class {
 			this.#lastIdPath = importId.currentPath;
 		}
 	}
+
+
 	/**
 	 * Export all the IDs of this instance for external storage
 	 *
@@ -293,13 +306,17 @@ export const BAP = class {
 	 * @param encrypted Whether the data should be encrypted (default true)
 	 * @returns {[]|*}
 	 */
+    // Overload signatures
+  exportIds(encrypted: true): string;
+  exportIds(encrypted: false): Identities;
+  exportIds(encrypted?: boolean): Identities | string;
 	exportIds(encrypted = true): Identities | string {
 		const idData: Identities = {
 			lastIdPath: this.#lastIdPath,
 			ids: [] as Identity[],
 		};
 
-		for (const key of Object.keys(this.#ids)) {
+		for (const key in this.#ids) {
 			idData.ids.push(this.#ids[key].export());
 		}
 
@@ -566,12 +583,12 @@ export const BAP = class {
 	): Promise<boolean> {
 		// first we test locally before sending to server
 		if (this.verifySignature(challenge, address, signature)) {
-			const result = await this.getApiData("/attestation/valid", {
+			const result = await this.getApiData<AttestationValidResponse>("/attestation/valid", {
 				idKey,
 				challenge,
 				signature,
 			});
-			return result.data;
+			return result ? result.valid : false;
 		}
 
 		return false;
@@ -601,7 +618,7 @@ export const BAP = class {
 	 * @param address
 	 * @returns {Promise<*>}
 	 */
-	async getIdentityFromAddress(address: string): Promise<any> {
+	async getIdentityFromAddress(address: string): Promise<GetIdentityByAddressResponse> {
 		return this.getApiData("/identity/from-address", {
 			address,
 		});
@@ -624,32 +641,14 @@ export const BAP = class {
 	 *
 	 * @param attestationHash
 	 */
-	async getAttestationsForHash(attestationHash: string): Promise<any> {
+	async getAttestationsForHash(attestationHash: string): Promise<GetAttestationResponse> {
 		// get all BAP ATTEST records for the given attestationHash
 		return this.getApiData("/attestations", {
 			hash: attestationHash,
 		});
 	}
 
-	/**
-	 * Helper function to get attestation from a BAP API server
-	 *
-	 * @param apiUrl
-	 * @param apiData
-	 * @returns {Promise<any>}
-	 */
-	async getApiData(apiUrl: string, apiData: any): Promise<any> {
-		const url = `${this.#BAP_SERVER}${apiUrl}`;
-		const response = await fetch(url, {
-			method: "post",
-			headers: {
-				"Content-type": "application/json; charset=utf-8",
-				token: this.#BAP_TOKEN,
-				format: "json",
-			},
-			body: JSON.stringify(apiData),
-		});
-
-		return response.json();
-	}
+  
 };
+
+export { BAP_ID }

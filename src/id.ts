@@ -7,6 +7,7 @@ import {
 	AIP_BITCOM_ADDRESS,
 	ENCRYPTION_PATH,
 } from "./constants";
+import { type APIFetcher, apiFetcher } from "./api";
 import { Utils } from "./utils";
 import type {
 	Identity,
@@ -14,6 +15,7 @@ import type {
 	IdentityAttributes,
 } from "./interface";
 import { Utils as BSVUtils } from "@bsv/sdk";
+import type { GetAttestationResponse } from "./apiTypes";
 const { toArray, toHex, toBase58, toUTF8, toBase64 } = BSVUtils;
 const { electrumDecrypt, electrumEncrypt } = ECIES;
 const { magicHash } = BSM;
@@ -40,12 +42,14 @@ class BAP_ID {
 	identityKey: string;
 	identityAttributes: IdentityAttributes;
 
+  getApiData: APIFetcher
+  
 	constructor(
-		HDPrivateKey: HD,
+    HDPrivateKey: HD,
 		identityAttributes: IdentityAttributes = {},
 		idSeed = "",
 	) {
-		this.#idSeed = idSeed;
+    this.#idSeed = idSeed;
 		if (idSeed) {
 			// create a new HDPrivateKey based on the seed
 			const seedHex = toHex(Hash.sha256(idSeed, "utf8"));
@@ -69,6 +73,8 @@ class BAP_ID {
 		// unlink the object
 		const attributes = { ...identityAttributes };
 		this.identityAttributes = this.parseAttributes(attributes);
+
+    this.getApiData = apiFetcher(this.#BAP_SERVER, this.#BAP_TOKEN);
 	}
 
 	set BAP_SERVER(bapServer) {
@@ -90,7 +96,6 @@ class BAP_ID {
 	deriveIdentityKey(address: string): string {
 		// base58( ripemd160 ( sha256 ( rootAddress ) ) )
 		const rootAddressHash = toHex(Hash.sha256(address, "utf8"));
-
 		return toBase58(Hash.ripemd160(rootAddressHash, "hex"));
 	}
 
@@ -197,7 +202,7 @@ class BAP_ID {
 	 * @param attributeValue any
 	 * @returns {{}|null}
 	 */
-	setAttribute(attributeName: string, attributeValue: any): void {
+	setAttribute(attributeName: string, attributeValue: string | Record<string,string>): void {
 		if (attributeValue) {
 			if (this.identityAttributes[attributeName]) {
 				this.identityAttributes[attributeName].value = attributeValue;
@@ -240,7 +245,7 @@ class BAP_ID {
 	 * @param attributeName
 	 * @returns {string|null}
 	 */
-	getAttributeUrn(attributeName: string) {
+	getAttributeUrn(attributeName: string): string | null {
 		const attribute = this.identityAttributes[attributeName];
 		if (attribute) {
 			return `urn:bap:id:${attributeName}:${attribute.value}:${attribute.nonce}`;
@@ -696,13 +701,13 @@ class BAP_ID {
 	 *
 	 * @param attribute
 	 */
-	async getAttributeAttestations(attribute: string): Promise<any> {
+	async getAttributeAttestations(attribute: string): Promise<GetAttestationResponse> {
 		// This function needs to make a call to a BAP server to get all the attestations for this
 		// identity for the given attribute
 		const attestationHash = this.getAttestationHash(attribute);
 
 		// get all BAP ATTEST records for the given attestationHash
-		const attestations = await this.getApiData("/attestations", {
+		const attestations = await this.getApiData<GetAttestationResponse>("/attestation/get", {
 			hash: attestationHash,
 		});
 		console.log("getAttestations", attribute, attestationHash, attestations);
@@ -710,26 +715,26 @@ class BAP_ID {
 		return attestations;
 	}
 
-	/**
-	 * Helper function to get attestation from a BAP API server
-	 *
-	 * @param apiUrl
-	 * @param apiData
-	 * @returns {Promise<any>}
-	 */
-	async getApiData(apiUrl: string, apiData: any): Promise<any> {
-		const url = `${this.#BAP_SERVER}${apiUrl}`;
-		const response = await fetch(url, {
-			method: "post",
-			headers: {
-				"Content-type": "application/json; charset=utf-8",
-				token: this.#BAP_TOKEN,
-				format: "json",
-			},
-			body: JSON.stringify(apiData),
-		});
-		return response.json();
-	}
+	// /**
+	//  * Helper function to get attestation from a BAP API server
+	//  *
+	//  * @param apiUrl
+	//  * @param apiData
+	//  * @returns {Promise<any>}
+	//  */
+	// async getApiData(apiUrl: string, apiData: any): Promise<any> {
+	// 	const url = `${this.#BAP_SERVER}${apiUrl}`;
+	// 	const response = await fetch(url, {
+	// 		method: "post",
+	// 		headers: {
+	// 			"Content-type": "application/json; charset=utf-8",
+	// 			token: this.#BAP_TOKEN,
+	// 			format: "json",
+	// 		},
+	// 		body: JSON.stringify(apiData),
+	// 	});
+	// 	return response.json();
+	// }
 
 	/**
 	 * Import an identity from a JSON object

@@ -1,4 +1,4 @@
-export type IdentityAttribute = Record<"value" | "nonce", string>
+export type IdentityAttribute = Record<"value" | "nonce", string | Record<string, string>>
 
 export interface IdentityAttributes {
 	[key: string]: IdentityAttribute;
