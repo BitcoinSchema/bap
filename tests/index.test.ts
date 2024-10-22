@@ -1,4 +1,4 @@
-import { describe, expect, test } from "@jest/globals";
+import { describe, expect, test } from "bun:test"
 
 import { BAP } from "../src";
 import { SIGNING_PATH_PREFIX, ENCRYPTION_PATH } from "../src/constants";
@@ -51,8 +51,8 @@ describe("bap", () => {
 		const bap = new BAP(HDPrivateKey);
 		const id = bap.newId();
 
-		expect(bap.BAP_SERVER).toEqual("https://api.sigmaidentity.com/api/v1");
-		expect(id.BAP_SERVER).toEqual("https://api.sigmaidentity.com/api/v1");
+		expect(bap.BAP_SERVER).toEqual("https://api.sigmaidentity.com/v1");
+		expect(id.BAP_SERVER).toEqual("https://api.sigmaidentity.com/v1");
 
 		const newServer = "https://bapdev.legallychained.com/";
 		bap.BAP_SERVER = newServer;

@@ -1,4 +1,4 @@
-import { BSM, Hash, type HD, ECIES, PublicKey, BigNumber } from "@bsv/sdk";
+import { BSM, Hash, type HD, ECIES, PublicKey, BigNumber, type Signature } from "@bsv/sdk";
 import {
 	MAX_INT,
 	SIGNING_PATH_PREFIX,
@@ -568,9 +568,9 @@ class BAP_ID {
 	 *
 	 * @param message
 	 * @param signingPath
-	 * @returns {{address, signature}}
+	 * @returns {{address: string, signature: string}}
 	 */
-	signMessage(message: string | Buffer, signingPath = "") {
+	signMessage(message: string | Buffer, signingPath = ""): { address: string, signature: string } {
 		let msg: Buffer;
 		if (!(message instanceof Buffer)) {
 			msg = Buffer.from(message);
@@ -583,13 +583,13 @@ class BAP_ID {
 		const address = childPk.toAddress();
 
     // Needed to calculate the recovery factor
-    const dummySig = BSM.sign(toArray(message), childPk);
+    const dummySig = BSM.sign(toArray(message), childPk, 'raw') as Signature;
 		const h = new BigNumber(magicHash(toArray(message, "utf8")));
 		const r = dummySig.CalculateRecoveryFactor(
 			childPk.toPublicKey(),
 			h,
 		);
-		const signature = BSM.sign(toArray(msg), childPk).toCompact(
+		const signature = (BSM.sign(toArray(msg), childPk, 'raw') as Signature).toCompact(
 			r,
 			true,
 			"base64",
@@ -621,7 +621,7 @@ class BAP_ID {
 		const derivedChild = HDPrivateKey.derive(path);
 		const address = derivedChild.privKey.toPublicKey().toAddress();
 
-		const dummySig = BSM.sign(toArray(message), derivedChild.privKey);
+		const dummySig = BSM.sign(toArray(message), derivedChild.privKey, 'raw') as Signature;
 
 		const h = new BigNumber(magicHash(toArray(message, "utf8")));
 		const r = dummySig.CalculateRecoveryFactor(
@@ -629,10 +629,11 @@ class BAP_ID {
 			h,
 		);
 
-		const signature = BSM.sign(
+		const signature = (BSM.sign(
 			toArray(Buffer.from(message)),
 			derivedChild.privKey,
-		).toCompact(r, true, "base64") as string;
+      'raw',
+		) as Signature).toCompact(r, true, "base64") as string;
 
 		return { address, signature };
 	}
@@ -681,7 +682,7 @@ class BAP_ID {
 		// add a trailing "|" - this is the AIP way
 		buffers.push(Buffer.from("|"));
 
-		return Buffer.concat([...buffers]);
+		return Buffer.concat([...buffers] as unknown as Uint8Array[]);
 	}
 
 	/**

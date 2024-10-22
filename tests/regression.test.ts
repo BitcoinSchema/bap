@@ -2,7 +2,7 @@ import {
   describe,
   expect,
   it,
-} from '@jest/globals';
+} from 'bun:test';
 import { BAP } from '../src';
 
 import testVectors from './data/test-vectors.json';

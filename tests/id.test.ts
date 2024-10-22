@@ -1,4 +1,4 @@
-import { describe, expect, beforeEach, test } from "@jest/globals";
+import { describe, expect, beforeEach, test } from "bun:test";
 import { BAP } from "../src";
 import { BAP_ID } from "../src/id";
 import { HDPrivateKey } from "./data/keys";
@@ -64,7 +64,7 @@ describe("bap-id", () => {
 	test("set BAP_SERVER", () => {
 		const bap = new BAP(HDPrivateKey);
 		const id = bap.newId();
-		expect(id.BAP_SERVER).toBe("https://api.sigmaidentity.com/api/v1");
+		expect(id.BAP_SERVER).toBe("https://api.sigmaidentity.com/v1");
 
 		const newServer = "https://some.newserverdomain.com/";
 		id.BAP_SERVER = newServer;

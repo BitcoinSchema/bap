@@ -307,9 +307,8 @@ export class BAP {
 	 * @returns {[]|*}
 	 */
     // Overload signatures
-  exportIds(encrypted: true): string;
+  exportIds(encrypted?: true): string;
   exportIds(encrypted: false): Identities;
-  exportIds(encrypted?: boolean): Identities | string;
 	exportIds(encrypted = true): Identities | string {
 		const idData: Identities = {
 			lastIdPath: this.#lastIdPath,
@@ -434,14 +433,14 @@ export class BAP {
 		}
 
 		try {
-			const signatureBufferStatements = [];
+			const signatureBufferStatements: Buffer[] = [];
 			for (let i = 0; i < 6 + dataOffset; i++) {
 				signatureBufferStatements.push(
 					Buffer.from(tx[i].replace("0x", ""), "hex"),
 				);
 			}
-			const attestationBuffer = Buffer.concat([...signatureBufferStatements]);
-			attestation.verified = this.verifySignature(
+      const attestationBuffer = Buffer.concat(signatureBufferStatements as unknown as Uint8Array[]);
+      attestation.verified = this.verifySignature(
 				attestationBuffer,
 				attestation.signingAddress,
 				attestation.signature,
@@ -508,21 +507,21 @@ export class BAP {
 		let dataStringBuffer = Buffer.from("");
 		if (dataString) {
 			dataStringBuffer = Buffer.concat([
-				Buffer.from(BAP_BITCOM_ADDRESS),
-				Buffer.from("DATA"),
-				Buffer.from(attestationHash),
-				Buffer.from(dataString),
-				Buffer.from("7c", "hex"),
+				Buffer.from(BAP_BITCOM_ADDRESS) as unknown as Uint8Array,
+				Buffer.from("DATA") as unknown as Uint8Array,
+				Buffer.from(attestationHash) as unknown as Uint8Array,
+				Buffer.from(dataString) as unknown as Uint8Array,
+				Buffer.from("7c", "hex") as unknown as Uint8Array,
 			]);
 		}
 		return Buffer.concat([
-			Buffer.from("6a", "hex"), // OP_RETURN
-			Buffer.from(BAP_BITCOM_ADDRESS),
-			Buffer.from("ATTEST"),
-			Buffer.from(attestationHash),
-			Buffer.from(`${counter}`),
-			Buffer.from("7c", "hex"),
-			dataStringBuffer,
+			Buffer.from("6a", "hex") as unknown as Uint8Array, // OP_RETURN
+			Buffer.from(BAP_BITCOM_ADDRESS) as unknown as Uint8Array,
+			Buffer.from("ATTEST") as unknown as Uint8Array,
+			Buffer.from(attestationHash) as unknown as Uint8Array,
+			Buffer.from(`${counter}`) as unknown as Uint8Array,
+			Buffer.from("7c", "hex") as unknown as Uint8Array,
+			dataStringBuffer as unknown as Uint8Array,
 		]);
 	}
 
@@ -631,7 +630,7 @@ export class BAP {
 	 * @returns {Promise<*>}
 	 */
 	async getIdentity(idKey: string): Promise<any> {
-		return this.getApiData("/identity", {
+		return this.getApiData("/identity/get", {
 			idKey,
 		});
 	}
