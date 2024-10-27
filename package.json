@@ -1,6 +1,6 @@
 {
   "name": "bsv-bap",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "BAP npm module",
   "repository": {
     "type": "git",
@@ -31,13 +31,13 @@
     "prepublishOnly": "bun run build"
   },
   "devDependencies": {
-    "@types/bun": "^1.1.9",
+    "@types/bun": "^1.1.12",
     "jest-fetch-mock": "^3.0.3",
     "microbundle": "^0.15.1",
     "npm-check": "6.0.1",
     "pre-commit": "^1.2.2",
     "rimraf": "^6.0.1",
-    "typescript": "^5.5.3"
+    "typescript": "^5.6.3"
   },
   "dependencies": {
     "@types/randombytes": "^2.0.3",
