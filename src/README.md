@@ -30,15 +30,18 @@ newId.description = "Pseudonymous identity to use on social media sites";
 newId.addAttribute("name", "John Doe");
 newId.addAttribute("email", "john@doe.com");
 
-// export all identities for storage
+// export all identities for storage (encrypted by default)
 const encryptedExport = bap.exportIds();
 
 // export specific identities
 const idKey = newId.getIdentityKey();
-const singleIdExport = bap.exportIds(true, [idKey]);
+const singleIdExport = bap.exportIds([idKey]);
 
 // export multiple specific identities
-const multipleIdExport = bap.exportIds(true, [idKey1, idKey2]);
+const multipleIdExport = bap.exportIds([idKey1, idKey2]);
+
+// export unencrypted
+const unencryptedExport = bap.exportIds(undefined, false);
 ```
 
 Signing:

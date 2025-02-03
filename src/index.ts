@@ -300,31 +300,32 @@ export class BAP {
 
 
   /**
-   * Export all the IDs of this instance for external storage
-   *
-   * By default this function will encrypt the data, using a derivative child of the main HD key
-   *
-   * @param encrypted Whether the data should be encrypted (default true)
-   * @returns {[]|*}
+   * Export identities. If no idKeys are provided, exports all identities.
+   * @param idKeys Optional array of identity keys to export. If omitted, exports all identities.
+   * @param encrypted Whether to encrypt the export data
    */
   // Overload signatures
-  exportIds(encrypted?: true): string;
-  exportIds(encrypted: false): Identities;
-  exportIds(encrypted = true): Identities | string {
+  exportIds(idKeys?: string[], encrypted?: true): string;
+  exportIds(idKeys: string[] | undefined, encrypted: false): Identities;
+  exportIds(idKeys?: string[], encrypted = true): Identities | string {
     const idData: Identities = {
       lastIdPath: this.#lastIdPath,
       ids: [] as Identity[],
     };
 
-    for (const key in this.#ids) {
+    const keysToExport = idKeys || Object.keys(this.#ids);
+
+    for (const key of keysToExport) {
+      if (!this.#ids[key]) {
+        throw new Error(`Identity ${key} not found`);
+      }
       idData.ids.push(this.#ids[key].export());
     }
 
     if (encrypted) {
       return this.encrypt(JSON.stringify(idData));
     }
-
-    return idData
+    return idData;
   }
 
 

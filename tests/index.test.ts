@@ -119,7 +119,8 @@ describe("BAP class", () => {
     bap.importIds(ids, false);
     testBAPInstance(bap);
 
-    const exportData = bap.exportIds(false);
+    // Update parameter order: from exportIds(false) to exportIds(undefined, false)
+    const exportData = bap.exportIds(undefined, false);
     expect(exportData).toStrictEqual(fullId);
   });
 
@@ -129,6 +130,7 @@ describe("BAP class", () => {
     bap.importIds(ids, false);
     testBAPInstance(bap);
 
+    // Update parameter order: from exportIds() to exportIds(undefined, true)
     const encryptedExportData = bap.exportIds();
     expect(typeof encryptedExportData).toBe("string");
 
