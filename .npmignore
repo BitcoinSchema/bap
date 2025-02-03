@@ -14,8 +14,6 @@ firebase.json
 biome.json
 tsconfig.json
 build.ts
-jest.config.js
-setup-jest.ts
 
 # Build artifacts and cache
 coverage/

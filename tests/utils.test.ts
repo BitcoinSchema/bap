@@ -1,11 +1,4 @@
-import {
-  describe,
-  expect,
-  beforeEach,
-  afterEach,
-  it,
-  test,
-} from '@jest/globals';
+import { describe, expect, it, test } from 'bun:test';
 import { Utils } from '../src/utils';
 
 describe('random', () => {

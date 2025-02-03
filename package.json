@@ -44,7 +44,6 @@
     "@size-limit/preset-small-lib": "^11.0.1",
     "@types/bun": "^1.2.2",
     "@types/node": "^22.13.0",
-    "jest-fetch-mock": "^3.0.3",
     "rimraf": "^6.0.1",
     "size-limit": "^11.0.1",
     "typescript": "^5.7.3"
