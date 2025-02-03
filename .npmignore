@@ -1,37 +1,18 @@
-# Source
+# Source and test files
 src/
 tests/
-examples/
-docs/
 
 # Config files
 .github/
 .vscode/
-.idea/
-.firebase/
-.firebaserc
-firebase.json
 biome.json
 tsconfig.json
 build.ts
 
-# Build artifacts and cache
-coverage/
-.nyc_output/
-*.tsbuildinfo
-.DS_Store
-
 # Development files
 *.log
-*.test.ts
-*.test.js
-*.spec.ts
-*.spec.js
-todo.md
-CONTRIBUTING.md
 CHANGELOG.md
-.goreleaser.yml
-Makefile
+.gitignore
 
 # Lock files
 package-lock.json
@@ -41,3 +22,8 @@ bun.lockb
 
 # Environment
 .env*
+
+# Build artifacts and cache
+coverage/
+*.tsbuildinfo
+.DS_Store
