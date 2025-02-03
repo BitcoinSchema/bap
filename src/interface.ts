@@ -1,4 +1,7 @@
-export type IdentityAttribute = Record<"value" | "nonce", string | Record<string, string>>
+export type IdentityAttribute = {
+  value: string;
+  nonce: string;
+}
 
 export interface IdentityAttributes {
   [key: string]: IdentityAttribute;
@@ -8,25 +11,32 @@ export interface BaseIdentity {
   name: string;
   description: string;
   identityKey: string;
-  rootPath: string;
   rootAddress: string;
-  currentPath: string;
-  previousPath: string;
   identityAttributes: IdentityAttributes;
+  idSeed?: string;
 }
 
 // Old format - array of identities with no container
 export interface OldIdentity extends BaseIdentity {
-  idSeed?: string;  // Optional in old format
+  currentPath?: string;
 }
 
-// New format - identity objects within container
-export interface Identity extends BaseIdentity {
+// HD Key based identity
+export interface HDIdentity extends BaseIdentity {
+  rootPath: string;
+  currentPath: string;
+  previousPath: string;
   lastIdPath: string;
-  idSeed: string;
 }
 
-// New format container structure
+// Single key based identity
+export interface SingleKeyIdentity extends BaseIdentity {
+  derivedPrivateKey: string;
+}
+
+export type Identity = HDIdentity | SingleKeyIdentity;
+
+// Container for storing identities
 export interface Identities {
   lastIdPath: string;
   ids: Identity[];

@@ -1,4 +1,4 @@
-import { BSM, Utils as BSVUtils, BigNumber, ECIES, type HD, Hash, PublicKey, type Signature } from "@bsv/sdk";
+import { BSM, Utils as BSVUtils, BigNumber, ECIES, HD, Hash, type PrivateKey, PublicKey, type Signature } from "@bsv/sdk";
 import { type APIFetcher, apiFetcher } from "./api";
 import type { GetAttestationResponse, GetSigningKeysResponse } from "./apiTypes";
 import {
@@ -7,13 +7,13 @@ import {
   BAP_SERVER,
   ENCRYPTION_PATH,
   MAX_INT,
-  SIGNING_PATH_PREFIX,
+  SIGNING_PATH_PREFIX
 } from "./constants";
 import type {
   Identity,
   IdentityAttribute,
   IdentityAttributes,
-  OldIdentity,
+  OldIdentity
 } from "./interface";
 import { Utils } from "./utils";
 const { toArray, toHex, toBase58, toUTF8, toBase64 } = BSVUtils;
@@ -26,71 +26,77 @@ const { magicHash } = BSM;
  *
  * @type {BAP_ID}
  */
-class BAP_ID {
-  #HDPrivateKey: HD;
-  #BAP_SERVER: string = BAP_SERVER;
-  #BAP_TOKEN = "";
-  #rootPath: string;
-  #previousPath: string;
-  #currentPath: string;
+export class BAP_ID {
+  #HDPrivateKey?: HD;
+  #singlePrivateKey?: PrivateKey;
+  #rootPath?: string;
+  #currentPath?: string;
+  #previousPath?: string;
+  lastIdPath = "";
   #idSeed: string;
-
-  idName: string;
+  name: string;
   description: string;
-
-  rootAddress: string;
   identityKey: string;
+  rootAddress: string;
   identityAttributes: IdentityAttributes;
-
-  getApiData: APIFetcher
+  private BAP_SERVER_: string;
+  private BAP_TOKEN_: string;
+  getApiData: APIFetcher;
 
   constructor(
-    HDPrivateKey: HD,
+    key: HD | PrivateKey,
     identityAttributes: IdentityAttributes = {},
     idSeed = "",
   ) {
     this.#idSeed = idSeed;
-    if (idSeed) {
-      // create a new HDPrivateKey based on the seed
-      const seedHex = toHex(Hash.sha256(idSeed, "utf8"));
-      const seedPath = Utils.getSigningPathFromHex(seedHex);
-      this.#HDPrivateKey = HDPrivateKey.derive(seedPath);
-    } else {
-      this.#HDPrivateKey = HDPrivateKey;
-    }
-
-    this.idName = "ID 1";
+    this.BAP_SERVER_ = BAP_SERVER;
+    this.BAP_TOKEN_ = "";
+    this.getApiData = apiFetcher(this.BAP_SERVER_, this.BAP_TOKEN_);
+    this.name = "ID 1";
     this.description = "";
 
-    this.#rootPath = `${SIGNING_PATH_PREFIX}/0/0/0`;
-    this.#previousPath = `${SIGNING_PATH_PREFIX}/0/0/0`;
-    this.#currentPath = `${SIGNING_PATH_PREFIX}/0/0/1`;
+    if (key instanceof HD) {
+      this.#HDPrivateKey = key;
+      if (idSeed) {
+        const seedHex = toHex(Hash.sha256(idSeed, "utf8"));
+        const seedPath = Utils.getSigningPathFromHex(seedHex);
+        this.#HDPrivateKey = key.derive(seedPath);
+      }
 
-    const rootChild = this.#HDPrivateKey.derive(this.#rootPath);
-    this.rootAddress = rootChild.privKey.toPublicKey().toAddress();
+      this.rootPath = `${SIGNING_PATH_PREFIX}/0/0/0`;
+      this.#previousPath = this.rootPath;
+      this.#currentPath = `${SIGNING_PATH_PREFIX}/0/0/1`;
+
+      const rootChild = this.#HDPrivateKey.derive(this.rootPath);
+      this.rootAddress = rootChild.privKey.toPublicKey().toAddress();
+    } else {
+      this.#singlePrivateKey = key;
+      this.rootAddress = key.toPublicKey().toAddress();
+    }
+
     this.identityKey = this.deriveIdentityKey(this.rootAddress);
 
-    // unlink the object
-    const attributes = { ...identityAttributes };
+    // Deep clone the attributes to unlink the object
+    const attributes = JSON.parse(JSON.stringify(identityAttributes));
     this.identityAttributes = this.parseAttributes(attributes);
-
-    this.getApiData = apiFetcher(this.#BAP_SERVER, this.#BAP_TOKEN);
-  }
-
-  set BAP_SERVER(bapServer) {
-    this.#BAP_SERVER = bapServer;
   }
 
   get BAP_SERVER(): string {
-    return this.#BAP_SERVER;
+    return this.BAP_SERVER_;
   }
 
-  set BAP_TOKEN(token) {
-    this.#BAP_TOKEN = token;
+  set BAP_SERVER(value: string) {
+    this.BAP_SERVER_ = value;
+    this.getApiData = apiFetcher(this.BAP_SERVER_, this.BAP_TOKEN_);
   }
 
   get BAP_TOKEN(): string {
-    return this.#BAP_TOKEN;
+    return this.BAP_TOKEN_;
+  }
+
+  set BAP_TOKEN(value: string) {
+    this.BAP_TOKEN_ = value;
+    this.getApiData = apiFetcher(this.BAP_SERVER_, this.BAP_TOKEN_);
   }
 
   deriveIdentityKey(address: string): string {
@@ -338,10 +344,18 @@ class BAP_ID {
   }
 
   get rootPath(): string {
+    if (!this.#rootPath) {
+      throw new Error("rootPath not set");
+    }
+
     return this.#rootPath;
   }
 
   getRootPath(): string {
+    if (!this.#rootPath) {
+      throw new Error("rootPath not set");
+    }
+
     return this.#rootPath;
   }
 
@@ -366,10 +380,18 @@ class BAP_ID {
   }
 
   get currentPath(): string {
+    if (!this.#currentPath) {
+      throw new Error("currentPath not set");
+    }
+
     return this.#currentPath;
   }
 
   get previousPath(): string {
+    if (!this.#previousPath) {
+      throw new Error("previousPath not set");
+    }
+
     return this.#previousPath;
   }
 
@@ -457,12 +479,16 @@ class BAP_ID {
   }
 
   /**
-   * Get address for given path
+   * Get address for given path. Only works if HDPrivateKey is set
    *
    * @param path
    * @returns {*}
    */
   getAddress(path: string): string {
+    if (!this.#HDPrivateKey) {
+      throw new Error("HDPrivateKey not set");
+    }
+
     const derivedChild = this.#HDPrivateKey.derive(path);
     return derivedChild.privKey.toPublicKey().toAddress();
   }
@@ -473,53 +499,68 @@ class BAP_ID {
    * @returns {*}
    */
   getCurrentAddress(): string {
+    if (!this.#currentPath) {
+      // get the address from the single key
+      if (!this.#singlePrivateKey) {
+        throw new Error("currentPath not set");
+      }
+      return this.#singlePrivateKey.toPublicKey().toAddress();
+    }
+
     return this.getAddress(this.#currentPath);
   }
 
   /**
-   * Get the public key for encrypting data for this identity
+   * Get the encryption public key for this identity
+   * This key is derived from the identity's root path + ENCRYPTION_PATH
    */
   getEncryptionPublicKey(): string {
-    const HDPrivateKey = this.#HDPrivateKey.derive(this.#rootPath);
-    const encryptionKey = HDPrivateKey.derive(ENCRYPTION_PATH).privKey;
-    // @ts-ignore
+    if (this.#HDPrivateKey) {
+      const rootChild = this.#HDPrivateKey.derive(this.rootPath);
+      const encryptionChild = rootChild.derive(ENCRYPTION_PATH);
+      return encryptionChild.pubKey.toString();
+    }
+    if (!this.#singlePrivateKey) {
+      throw new Error("No private key available for encryption");
+    }
+    return this.#singlePrivateKey.toPublicKey().toString();
+  }
+
+  /**
+   * Get the encryption public key for this identity with a seed
+   * This key is derived from the identity's root path + ENCRYPTION_PATH + seed path
+   */
+  getEncryptionPublicKeyWithSeed(seed: string): string {
+    const encryptionKey = this.getEncryptionPrivateKeyWithSeed(seed);
     return encryptionKey.toPublicKey().toString();
   }
 
   /**
-   * Get the public key for encrypting data for this identity, using a seed for the encryption
-   */
-  getEncryptionPublicKeyWithSeed(seed: string): string {
-    const encryptionKey = this.getEncryptionPrivateKeyWithSeed(seed);
-    // @ts-ignore
-    return encryptionKey.toPublicKey().toString("hex");
-  }
-
-  /**
-   * Encrypt the given string data with the identity encryption key
-   * @param stringData
-   * @param counterPartyPublicKey Optional public key of the counterparty
-   * @return string Base64
+   * Encrypt data using this identity's encryption key
    */
   encrypt(stringData: string, counterPartyPublicKey?: string): string {
-    const HDPrivateKey = this.#HDPrivateKey.derive(this.#rootPath);
-    const encryptionKey = HDPrivateKey.derive(ENCRYPTION_PATH).privKey;
+    if (!this.#HDPrivateKey) {
+      throw new Error("HDPrivateKey not set");
+    }
+    const rootChild = this.#HDPrivateKey.derive(this.rootPath);
+    const encryptionKey = rootChild.derive(ENCRYPTION_PATH).privKey;
     const publicKey = encryptionKey.toPublicKey();
     const pubKey = counterPartyPublicKey
       ? PublicKey.fromString(counterPartyPublicKey)
       : publicKey;
-    // @ts-ignore - remove this when SDK is updated
-    return toBase64(electrumEncrypt(toArray(stringData), pubKey, null));
+    return toBase64(electrumEncrypt(toArray(stringData), pubKey, encryptionKey));
   }
 
   /**
-   * Decrypt the given ciphertext with the identity encryption key
-   * @param ciphertext
+   * Decrypt data using this identity's encryption key
    */
   decrypt(ciphertext: string, counterPartyPublicKey?: string): string {
-    const HDPrivateKey = this.#HDPrivateKey.derive(this.#rootPath);
-    const encryptionKey = HDPrivateKey.derive(ENCRYPTION_PATH).privKey;
-    let pubKey = undefined
+    if (!this.#HDPrivateKey) {
+      throw new Error("HDPrivateKey not set");
+    }
+    const rootChild = this.#HDPrivateKey.derive(this.rootPath);
+    const encryptionKey = rootChild.derive(ENCRYPTION_PATH).privKey;
+    let pubKey: PublicKey | undefined;
     if (counterPartyPublicKey) {
       pubKey = PublicKey.fromString(counterPartyPublicKey);
     }
@@ -527,11 +568,7 @@ class BAP_ID {
   }
 
   /**
-   * Encrypt the given string data with the identity encryption key
-   * @param stringData
-   * @param seed String seed
-   * @param counterPartyPublicKey Optional public key of the counterparty
-   * @return string Base64
+   * Encrypt data using this identity's encryption key with a seed
    */
   encryptWithSeed(
     stringData: string,
@@ -547,14 +584,12 @@ class BAP_ID {
   }
 
   /**
-   * Decrypt the given ciphertext with the identity encryption key
-   * @param ciphertext
-   * @param seed String seed
-  //  * @param counterPartyPublicKey Public key of the counterparty
+   * Decrypt data using this identity's encryption key with a seed
    */
   decryptWithSeed(ciphertext: string, seed: string, counterPartyPublicKey?: string): string {
     const encryptionKey = this.getEncryptionPrivateKeyWithSeed(seed);
-    let pubKey = undefined
+    const publicKey = encryptionKey.toPublicKey();
+    let pubKey = publicKey;
     if (counterPartyPublicKey) {
       pubKey = PublicKey.fromString(counterPartyPublicKey);
     }
@@ -562,11 +597,16 @@ class BAP_ID {
   }
 
   private getEncryptionPrivateKeyWithSeed(seed: string) {
-    const pathHex = toHex(Hash.sha256(seed, "utf8"));
-    const path = Utils.getSigningPathFromHex(pathHex);
-
-    const HDPrivateKey = this.#HDPrivateKey.derive(this.#rootPath);
-    return HDPrivateKey.derive(path).privKey;
+    if (!this.#HDPrivateKey) {
+      throw new Error("HDPrivateKey not set");
+    }
+    if (!this.#rootPath) {
+      throw new Error("rootPath not set");
+    }
+    const seedHex = toHex(Hash.sha256(seed, "utf8"));
+    const seedPath = Utils.getSigningPathFromHex(seedHex);
+    const rootChild = this.#HDPrivateKey.derive(this.rootPath);
+    return rootChild.derive(seedPath).privKey;
   }
 
   /**
@@ -603,26 +643,48 @@ class BAP_ID {
    * @param signingPath
    * @returns {{address: string, signature: string}}
    */
-  signMessage(message: string | Buffer, signingPath = ""): { address: string, signature: string } {
-    let msg: Buffer;
-    if (!(message instanceof Buffer)) {
-      msg = Buffer.from(message);
-    } else {
-      msg = message;
+  signMessage(
+    msg: string | Buffer,
+    signingPath = "",
+  ): { address: string; signature: string } {
+    if (!this.#HDPrivateKey && !this.#singlePrivateKey) {
+      throw new Error("No private key available");
     }
 
-    const pathToUse = signingPath || this.#currentPath;
-    const childPk = this.#HDPrivateKey.derive(pathToUse).privKey;
-    const address = childPk.toAddress();
+    if (this.#HDPrivateKey) {
+      if (!this.#currentPath) {
+        throw new Error("currentPath not set");
+      }
 
-    // Needed to calculate the recovery factor
-    const dummySig = BSM.sign(toArray(message), childPk, 'raw') as Signature;
-    const h = new BigNumber(magicHash(toArray(message, "utf8")));
+      const path = signingPath || this.#currentPath;
+      const childPk = this.#HDPrivateKey.derive(path).privKey;
+      const address = childPk.toPublicKey().toAddress();
+
+      const dummySig = BSM.sign(toArray(msg), childPk, 'raw') as Signature;
+      const h = new BigNumber(magicHash(toArray(msg, "utf8")));
+      const r = dummySig.CalculateRecoveryFactor(
+        childPk.toPublicKey(),
+        h,
+      );
+      const signature = (BSM.sign(toArray(msg), childPk, 'raw') as Signature).toCompact(
+        r,
+        true,
+        "base64",
+      ) as string;
+
+      return { address, signature };
+    }
+
+    // At this point, we know this.#singlePrivateKey is defined because of the first check
+    const privateKey = this.#singlePrivateKey as PrivateKey;
+    const address = privateKey.toPublicKey().toAddress();
+    const dummySig = BSM.sign(toArray(msg), privateKey, 'raw') as Signature;
+    const h = new BigNumber(magicHash(toArray(msg, "utf8")));
     const r = dummySig.CalculateRecoveryFactor(
-      childPk.toPublicKey(),
+      privateKey.toPublicKey(),
       h,
     );
-    const signature = (BSM.sign(toArray(msg), childPk, 'raw') as Signature).toCompact(
+    const signature = (BSM.sign(toArray(msg), privateKey, 'raw') as Signature).toCompact(
       r,
       true,
       "base64",
@@ -647,6 +709,12 @@ class BAP_ID {
     message: string,
     seed: string,
   ): { address: string; signature: string } {
+    if (!this.#HDPrivateKey) {
+      throw new Error("HDPrivateKey not set");
+    }
+    if (!this.#rootPath) {
+      throw new Error("rootPath not set");
+    }
     const pathHex = toHex(Hash.sha256(seed, "utf8"));
     const path = Utils.getSigningPathFromHex(pathHex);
 
@@ -749,42 +817,23 @@ class BAP_ID {
     return attestations;
   }
 
-  // /**
-  //  * Helper function to get attestation from a BAP API server
-  //  *
-  //  * @param apiUrl
-  //  * @param apiData
-  //  * @returns {Promise<any>}
-  //  */
-  // async getApiData(apiUrl: string, apiData: any): Promise<any> {
-  // 	const url = `${this.#BAP_SERVER}${apiUrl}`;
-  // 	const response = await fetch(url, {
-  // 		method: "post",
-  // 		headers: {
-  // 			"Content-type": "application/json; charset=utf-8",
-  // 			token: this.#BAP_TOKEN,
-  // 			format: "json",
-  // 		},
-  // 		body: JSON.stringify(apiData),
-  // 	});
-  // 	return response.json();
-  // }
-
   /**
    * Import an identity from a JSON object
    *
    * @param identity{{}}
    */
-  import(identity: Identity | OldIdentity): void {
-    this.idName = identity.name;
-    this.description = identity.description || "";
-    this.identityKey = identity.identityKey;
-    this.#rootPath = identity.rootPath;
-    this.rootAddress = identity.rootAddress;
-    this.#previousPath = identity.previousPath;
-    this.#currentPath = identity.currentPath;
-    this.#idSeed = ('idSeed' in identity ? identity.idSeed : "") || "";
-    this.identityAttributes = this.parseAttributes(identity.identityAttributes);
+  import(id: Identity | OldIdentity): void {
+    this.name = ('name' in id && typeof id.name === 'string' ? id.name : "ID 1");
+    this.description = id.description || "";
+    this.identityKey = id.identityKey;
+    this.rootAddress = id.rootAddress;
+    if ('rootPath' in id && 'currentPath' in id && 'previousPath' in id) {
+      this.#rootPath = id.rootPath;
+      this.#currentPath = id.currentPath;
+      this.#previousPath = id.previousPath;
+    }
+    this.#idSeed = id.idSeed || "";
+    this.identityAttributes = this.parseAttributes(id.identityAttributes);
   }
 
   /**
@@ -792,19 +841,36 @@ class BAP_ID {
    * @returns {{}}
    */
   export(): Identity {
+    if (this.#HDPrivateKey) {
+      if (!this.#rootPath || !this.#currentPath || !this.#previousPath) {
+        throw new Error("Required paths are not set");
+      }
+      return {
+        rootPath: this.#rootPath,
+        currentPath: this.#currentPath,
+        previousPath: this.#previousPath,
+        lastIdPath: this.lastIdPath,
+        idSeed: this.#idSeed,
+        name: this.name,
+        description: this.description,
+        identityKey: this.identityKey,
+        rootAddress: this.rootAddress,
+        identityAttributes: this.identityAttributes
+      };
+    }
+    if (!this.#singlePrivateKey) {
+      throw new Error("Neither HDPrivateKey nor singlePrivateKey is set");
+    }
     return {
-      name: this.idName,
+      derivedPrivateKey: this.#singlePrivateKey.toString(),
+      idSeed: this.#idSeed,
+      name: this.name,
       description: this.description,
       identityKey: this.identityKey,
-      rootPath: this.#rootPath,
       rootAddress: this.rootAddress,
-      previousPath: this.#previousPath,
-      currentPath: this.#currentPath,
-      idSeed: this.#idSeed,
-      identityAttributes: this.getAttributes(),
-      lastIdPath: "",
+      identityAttributes: this.identityAttributes
     };
   }
 }
 
-export { BAP_ID };
+// export { BAP_ID };

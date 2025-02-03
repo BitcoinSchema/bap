@@ -1,6 +1,4 @@
-import { BSM, BigNumber, ECIES, HD, type PublicKey, Signature } from "@bsv/sdk";
-
-import { Utils as BSVUtils } from "@bsv/sdk";
+import { BSM, Utils as BSVUtils, BigNumber, ECIES, HD, PrivateKey, type PublicKey, Signature } from "@bsv/sdk";
 import { type APIFetcher, apiFetcher } from "./api";
 import type { AttestationValidResponse, GetAttestationResponse, GetIdentityByAddressResponse, GetIdentityResponse } from "./apiTypes";
 import {
@@ -11,12 +9,15 @@ import {
   ENCRYPTION_PATH,
 } from "./constants";
 import { BAP_ID } from "./id";
-import type { Attestation, Identity, IdentityAttributes, OldIdentity, PathPrefix } from "./interface";
+import type { Attestation, HDIdentity, Identity, IdentityAttributes, OldIdentity, PathPrefix, SingleKeyIdentity } from "./interface";
 import { Utils } from "./utils";
 const { toArray, toUTF8, toBase64 } = BSVUtils;
 const { electrumEncrypt, electrumDecrypt } = ECIES;
 
-type Identities = { lastIdPath: string; ids: Identity[] };
+type Identities = {
+  lastIdPath: string;
+  ids: Identity[];  // Changed from (HDIdentity | SingleKeyIdentity[])
+};
 
 
 /**
@@ -27,61 +28,75 @@ type Identities = { lastIdPath: string; ids: Identity[] };
  * @param HDPrivateKey
  */
 export class BAP {
-  #HDPrivateKey;
-  #ids: { [key: string]: BAP_ID } = {};
-  #BAP_SERVER = BAP_SERVER;
-  #BAP_TOKEN = "";
+  #HDPrivateKey: HD | PrivateKey;
   #lastIdPath = "";
+  public get lastIdPath(): string {
+    return this.#lastIdPath;
+  }
+  #ids: { [key: string]: BAP_ID } = {};
+  #BAP_SERVER: string = BAP_SERVER;
+  #BAP_TOKEN = "";
   getApiData: APIFetcher;
 
-
-
-  constructor(HDPrivateKey: string, token = "", server = "") {
-    if (!HDPrivateKey) {
-      throw new Error("No HDPrivateKey given");
-    }
-    this.#HDPrivateKey = HD.fromString(HDPrivateKey);
-
-    if (token) {
-      this.#BAP_TOKEN = token;
+  constructor(key: string | HD | PrivateKey, token?: string) {
+    if (!key) {
+      throw new Error("Key is required for BAP initialization");
     }
 
-    if (server) {
-      this.#BAP_SERVER = server;
+    if (typeof key === 'string') {
+      try {
+        this.#HDPrivateKey = HD.fromString(key);
+      } catch (e) {
+        try {
+          this.#HDPrivateKey = PrivateKey.fromWif(key);
+        } catch (e2) {
+          throw new Error('Invalid private key format');
+        }
+      }
+    } else {
+      this.#HDPrivateKey = key;
     }
+
+    if (token !== undefined) this.#BAP_TOKEN = token;
 
     this.getApiData = apiFetcher(this.#BAP_SERVER, this.#BAP_TOKEN);
   }
 
-  get lastIdPath(): string {
-    return this.#lastIdPath;
+  private isHD(key: HD | PrivateKey): key is HD {
+    return 'depth' in key && 'parentFingerPrint' in key;
   }
 
   /**
-   * Get the public key of the given childPath, or of the current HDPrivateKey of childPath is empty
+   * Get the public key of the given childPath, or of the current HDPrivateKey if childPath is empty
    *
    * @param childPath Full derivation path for this child
-   * @returns {*}
+   * @returns {string}
    */
   getPublicKey(childPath = ""): string {
-    if (childPath) {
-      return this.#HDPrivateKey.derive(childPath).pubKey.toString();
+    if (this.isHD(this.#HDPrivateKey)) {
+      if (childPath !== "") {
+        return this.#HDPrivateKey.derive(childPath).pubKey.toString();
+      }
+      return this.#HDPrivateKey.pubKey.toString();
     }
-
-    return this.#HDPrivateKey.pubKey.toString();
+    // For single key mode, derivation is not supported, ignore childPath
+    return this.#HDPrivateKey.toPublicKey().toString();
   }
 
   /**
-   * Get the public key of the given childPath, or of the current HDPrivateKey of childPath is empty
+   * Get the HD public key (xpub) of the given childPath, or of the current HDPrivateKey if childPath is empty
    *
    * @param childPath Full derivation path for this child
-   * @returns {*}
+   * @returns {string}
    */
   getHdPublicKey(childPath = ""): string {
+    if (!this.isHD(this.#HDPrivateKey)) {
+      throw new Error("Not an HD key");
+    }
+
     if (childPath) {
       return this.#HDPrivateKey.derive(childPath).toPublic().toString();
     }
-
     return this.#HDPrivateKey.toPublic().toString();
   }
 
@@ -115,8 +130,13 @@ export class BAP {
    * @param bapId BAP_ID instance
    */
   checkIdBelongs(bapId: BAP_ID): boolean {
+    if (!this.isHD(this.#HDPrivateKey)) {
+      throw new Error("checkIdBelongs can only be used in HD mode");
+    }
+
     const derivedChild = this.#HDPrivateKey.derive(bapId.rootPath);
     const checkRootAddress = derivedChild.pubKey.toAddress();
+
     if (checkRootAddress !== bapId.rootAddress) {
       throw new Error("ID does not belong to this private key");
     }
@@ -235,49 +255,86 @@ export class BAP {
       this.importEncryptedIds(idData);
       return;
     }
-    const identity = idData as Identities
-    if (!identity.lastIdPath) {
-      throw new Error("ID cannot be imported as it is not complete");
+
+    const identity = idData as Identities;
+    if (!identity.lastIdPath || !Array.isArray(identity.ids)) {
+      throw new Error("ID data is not in the correct format");
     }
 
-    if (!identity.ids) {
-      throw new Error(`ID data is not in the correct format: ${idData}`);
+    const isSingleKeyMode = !(this.#HDPrivateKey instanceof HD);
+    if (isSingleKeyMode && identity.ids.length > 1) {
+      throw new Error("Cannot import multiple IDs in single key mode");
     }
 
-    let lastIdPath = (idData as Identities).lastIdPath;
+    let lastIdPath = identity.lastIdPath;
+
     for (const id of identity.ids) {
       if (!id.identityKey || !id.identityAttributes || !id.rootAddress) {
         throw new Error("ID cannot be imported as it is not complete");
       }
-      const importId = new BAP_ID(this.#HDPrivateKey, {}, id.idSeed);
+
+      let importId: BAP_ID;
+
+      if (this.isSingleKeyIdentity(id)) {
+        if (!isSingleKeyMode) {
+          throw new Error("Cannot import single key identity in HD mode");
+        }
+        const privKey = PrivateKey.fromString(id.derivedPrivateKey, "hex");
+        importId = new BAP_ID(
+          privKey,
+          id.identityAttributes,
+          id.idSeed
+        );
+      } else if (this.isHDIdentity(id)) {
+        if (isSingleKeyMode) {
+          throw new Error("Cannot import HD identity in single key mode");
+        }
+        const hdKey = this.#HDPrivateKey as HD;
+        importId = new BAP_ID(
+          hdKey,
+          id.identityAttributes,  // Remove the type assertion
+          id.idSeed
+        );
+        importId.rootPath = id.rootPath;
+        importId.currentPath = id.currentPath;
+      } else {
+        throw new Error("Invalid identity format");
+      }
+
       importId.BAP_SERVER = this.#BAP_SERVER;
       importId.BAP_TOKEN = this.#BAP_TOKEN;
       importId.import(id);
-      if (lastIdPath === "") {
-        lastIdPath = importId.currentPath;
+
+      if (!isSingleKeyMode && this.isHDIdentity(id)) {
+        if (lastIdPath === "") {
+          lastIdPath = id.currentPath;
+        }
+        this.checkIdBelongs(importId);
       }
 
-      this.checkIdBelongs(importId);
       this.#ids[importId.getIdentityKey()] = importId;
     }
 
-    this.#lastIdPath = lastIdPath;
+    if (!isSingleKeyMode) {
+      this.#lastIdPath = lastIdPath;
+    }
   }
 
   importEncryptedIds(idData: string): void {
-    // decrypt the ids array using ECIES
     const decrypted = this.decrypt(idData);
-    const ids = JSON.parse(decrypted) as Identities;
+    const ids = JSON.parse(decrypted) as Identities | OldIdentity[];
 
-    const isOldFormat = Array.isArray(ids)
+    const isOldFormat = Array.isArray(ids);
     if (isOldFormat) {
-      console.log("Importing old format:\n", ids)
-      this.importOldIds(ids)
-      return
+      console.log("Importing old format:\n", ids);
+      this.importOldIds(ids);
+      return;
     }
+
     if (typeof ids !== "object") {
-      throw new Error("decrypted, but found unrecognized identities format")
+      throw new Error("decrypted, but found unrecognized identities format");
     }
+
     this.importIds(ids, false);
   }
 
@@ -294,23 +351,26 @@ export class BAP {
 
       this.checkIdBelongs(importId);
       this.#ids[importId.getIdentityKey()] = importId;
-      this.#lastIdPath = importId.currentPath;
+
+      // Ensure currentPath is always a string
+      if ('currentPath' in id && typeof id.currentPath === 'string') {
+        this.#lastIdPath = id.currentPath;
+      } else {
+        this.#lastIdPath = "";
+      }
     }
   }
 
 
   /**
    * Export identities. If no idKeys are provided, exports all identities.
-   * @param idKeys Optional array of identity keys to export. If omitted, exports all identities.
-   * @param encrypted Whether to encrypt the export data
    */
-  // Overload signatures
   exportIds(idKeys?: string[], encrypted?: true): string;
   exportIds(idKeys: string[] | undefined, encrypted: false): Identities;
   exportIds(idKeys?: string[], encrypted = true): Identities | string {
     const idData: Identities = {
       lastIdPath: this.#lastIdPath,
-      ids: [] as Identity[],
+      ids: [],
     };
 
     const keysToExport = idKeys || Object.keys(this.#ids);
@@ -363,10 +423,12 @@ export class BAP {
    * @returns {string}
    */
   encrypt(string: string): string {
+    if (!this.isHD(this.#HDPrivateKey)) {
+      throw new Error("Encryption not supported in single key mode");
+    }
     const derivedChild = this.#HDPrivateKey.derive(ENCRYPTION_PATH);
     return toBase64(
-      // @ts-ignore - you can remove the null when this is merged https://github.com/bitcoin-sv/ts-sdk/pull/123
-      electrumEncrypt(toArray(string), derivedChild.pubKey, null),
+      electrumEncrypt(toArray(string), derivedChild.pubKey, undefined),  // Changed null to undefined
     );
   }
 
@@ -377,6 +439,9 @@ export class BAP {
    * @returns {string}
    */
   decrypt(string: string): string {
+    if (!this.isHD(this.#HDPrivateKey)) {
+      throw new Error("Decryption not supported in single key mode");
+    }
     const derivedChild = this.#HDPrivateKey.derive(ENCRYPTION_PATH);
     return toUTF8(
       electrumDecrypt(toArray(string, "base64"), derivedChild.privKey),
@@ -689,9 +754,24 @@ export class BAP {
     });
   }
 
+  private isSingleKeyIdentity(id: Identity): id is SingleKeyIdentity {
+    return 'derivedPrivateKey' in id;
+  }
+
+  private isHDIdentity(id: Identity): id is HDIdentity {
+    return 'rootPath' in id && 'currentPath' in id && 'previousPath' in id;
+  }
 
 };
 
 export { BAP_ID };
 export type { Attestation, Identity, IdentityAttributes, PathPrefix };
+
+function isSingleKeyIdentity(id: Identity): id is SingleKeyIdentity {
+  return 'derivedPrivateKey' in id;
+}
+
+function isHDIdentity(id: Identity): id is HDIdentity {
+  return 'rootPath' in id && 'currentPath' in id && 'previousPath' in id;
+}
 

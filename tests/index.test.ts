@@ -403,3 +403,51 @@ describe("BAP class", () => {
     }
   });
 });
+
+
+describe("verifyChallengeSignature", async () => {
+  test("should verify a challenge signature", async () => {
+    const originalFetch = global.fetch;
+
+    try {
+      const privateKey = PrivateKey.fromWif('L4C6X6aJccc5KDzJRTLqskz6gxAwUx9QJVi2S4BZATfdzjw8TUJH');
+      const address = privateKey.toAddress();
+      const message = 'test message';
+      const messageBuffer = Buffer.from(message);
+      const msg = toArray(messageBuffer.toString('hex'), 'hex');
+      const dummySig = BSM.sign(msg, privateKey, 'raw') as Signature;
+      const h = new BigNumber(BSM.magicHash(msg));
+      const r = dummySig.CalculateRecoveryFactor(privateKey.toPublicKey(), h);
+      const signature = dummySig.toCompact(r, true, "base64") as string;
+
+      const bap = new BAP(HDPrivateKey);
+      const localVerify = bap.verifySignature(message, address.toString(), signature);
+      expect(localVerify).toBe(true);
+
+      global.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const mockResponse = {
+          status: "success",
+          result: {
+            valid: true,
+            block: 12345,
+            timestamp: Date.now()
+          }
+        };
+        return new Response(JSON.stringify(mockResponse), {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        });
+      }) as typeof global.fetch;
+
+      const result = await bap.verifyChallengeSignature(
+        identityKey,
+        address.toString(),
+        message,
+        signature
+      );
+      expect(result).toBe(true);
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+});
