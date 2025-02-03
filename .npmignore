@@ -1,16 +1,45 @@
-bower_components
-node_modules
-test
-*.log
-.DS_Store
-.idea
+# Source
+src/
+tests/
 examples/
-.github
-.firebase
+docs/
+
+# Config files
+.github/
+.vscode/
+.idea/
 .firebase/
 .firebaserc
 firebase.json
+biome.json
+tsconfig.json
+build.ts
+jest.config.js
+setup-jest.ts
+
+# Build artifacts and cache
+coverage/
+.nyc_output/
+*.tsbuildinfo
+.DS_Store
+
+# Development files
+*.log
+*.test.ts
+*.test.js
+*.spec.ts
+*.spec.js
 todo.md
-dist
+CONTRIBUTING.md
+CHANGELOG.md
 .goreleaser.yml
 Makefile
+
+# Lock files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+bun.lockb
+
+# Environment
+.env*

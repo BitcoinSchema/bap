@@ -1,4 +1,5 @@
 # Bitcoin Attestation Protocol - BAP
+
 > A simple protocol to create a chain of trust for any kind of information on the Bitcoin blockchain
 
 Javascript classes for working with identities and attestations.
@@ -14,65 +15,77 @@ npm install bitcoin-bap --save
 ```
 
 Example creating a new ID:
+
 ```javascript
-const HDPrivateKey = 'xprv...';
+const HDPrivateKey = "xprv...";
 const bap = new BAP(HDPrivateKey);
 
 // Create a new identity
 const newId = bap.newId();
 // set the name of the ID
-newId.name = 'Social media identity';
+newId.name = "Social media identity";
 // set a description for this ID
-newId.description = 'Pseudonymous identity to use on social media sites';
+newId.description = "Pseudonymous identity to use on social media sites";
 // set identity attributes
-newId.addAttribute('name', 'John Doe');
-newId.addAttribute('email', 'john@doe.com');
+newId.addAttribute("name", "John Doe");
+newId.addAttribute("email", "john@doe.com");
 
-// export the identities for storage
+// export all identities for storage
 const encryptedExport = bap.exportIds();
+
+// export specific identities
+const idKey = newId.getIdentityKey();
+const singleIdExport = bap.exportIds(true, [idKey]);
+
+// export multiple specific identities
+const multipleIdExport = bap.exportIds(true, [idKey1, idKey2]);
 ```
 
 Signing:
+
 ```javascript
-const HDPrivateKey = 'xprv...';
+const HDPrivateKey = "xprv...";
 const bap = new BAP(HDPrivateKey);
 const identity = bap.getId("<identityKey>");
 
 // B protocol data
 const opReturn = [
-  Buffer.from('19HxigV4QyBv3tHpQVcUEQyq1pzZVdoAut').toString('hex'),
-  Buffer.from('Hello World!').toString('hex'),
-  Buffer.from('text/plain').toString('hex'),
-  Buffer.from('utf8').toString('hex'),
+  Buffer.from("19HxigV4QyBv3tHpQVcUEQyq1pzZVdoAut").toString("hex"),
+  Buffer.from("Hello World!").toString("hex"),
+  Buffer.from("text/plain").toString("hex"),
+  Buffer.from("utf8").toString("hex"),
 ];
 // signOpReturnWithAIP expects and returns hex values
 const signedOpReturn = identity.signOpReturnWithAIP(opReturn);
 ```
 
 Encryption, every identity has a separate encryption/decryption key:
+
 ```javascript
-const HDPrivateKey = 'xprv...';
+const HDPrivateKey = "xprv...";
 const bap = new BAP(HDPrivateKey);
 const identity = bap.getId("<identityKey>");
 
 const publicKey = identity.getEncryptionPublicKey();
 
-const cipherText = identity.encrypt('Hello World!');
+const cipherText = identity.encrypt("Hello World!");
 
 const text = identity.decrypt(cipherText);
 ```
 
 The encryption uses `ECIES` from the `@bsv/sdk` library:
+
 ```javascript
-import { ECIES, Utils } from '@bsv/sdk'
+import { ECIES, Utils } from "@bsv/sdk";
 const { toArray, toBase64 } = Utils;
 
 return toBase64(bitcoreEncrypt(toArray(stringData)));
 ```
 
 Other examples:
+
 ```javascript
-// List the identity keys of all id's 
+// List the identity keys of all id's
 const idKeys = bap.listIds();
 
 // get a certain id

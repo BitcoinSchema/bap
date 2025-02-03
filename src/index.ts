@@ -2,7 +2,7 @@ import { BSM, BigNumber, ECIES, HD, type PublicKey, Signature } from "@bsv/sdk";
 
 import { Utils as BSVUtils } from "@bsv/sdk";
 import { type APIFetcher, apiFetcher } from "./api";
-import type { AttestationValidResponse, GetAttestationResponse, GetIdentityByAddressResponse } from "./apiTypes";
+import type { AttestationValidResponse, GetAttestationResponse, GetIdentityByAddressResponse, GetIdentityResponse } from "./apiTypes";
 import {
   AIP_BITCOM_ADDRESS,
   BAP_BITCOM_ADDRESS,
@@ -11,7 +11,7 @@ import {
   ENCRYPTION_PATH,
 } from "./constants";
 import { BAP_ID } from "./id";
-import type { Attestation, Identity, IdentityAttributes, PathPrefix } from "./interface";
+import type { Attestation, Identity, IdentityAttributes, OldIdentity, PathPrefix } from "./interface";
 import { Utils } from "./utils";
 const { toArray, toUTF8, toBase64 } = BSVUtils;
 const { electrumEncrypt, electrumDecrypt } = ECIES;
@@ -281,18 +281,19 @@ export class BAP {
     this.importIds(ids, false);
   }
 
-  importOldIds(idData: Identity[]): void {
+  importOldIds(idData: OldIdentity[]): void {
     for (const id of idData) {
-      const importId = new BAP_ID(this.#HDPrivateKey, {}, id.idSeed);
+      const importId = new BAP_ID(
+        this.#HDPrivateKey,
+        {},
+        id.idSeed ?? ""
+      );
       importId.BAP_SERVER = this.#BAP_SERVER;
       importId.BAP_TOKEN = this.#BAP_TOKEN;
       importId.import(id);
 
       this.checkIdBelongs(importId);
-
       this.#ids[importId.getIdentityKey()] = importId;
-
-      // overwrite with the last value on this array
       this.#lastIdPath = importId.currentPath;
     }
   }
@@ -609,16 +610,30 @@ export class BAP {
     signature: string,
   ): Promise<boolean> {
     // first we test locally before sending to server
-    if (this.verifySignature(challenge, address, signature)) {
-      const result = await this.getApiData<AttestationValidResponse>("/attestation/valid", {
+    const localVerification = this.verifySignature(challenge, address, signature);
+
+    if (!localVerification) {
+      return false;
+    }
+
+    try {
+      const response = await this.getApiData<AttestationValidResponse>("/attestation/valid", {
         idKey,
+        address,
         challenge,
         signature,
       });
-      return result ? result.valid : false;
-    }
 
-    return false;
+      // Ensure we have a valid response with the expected structure
+      if (response?.status === 'success' && response?.result?.valid === true) {
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      console.error('API call failed:', error);
+      return false;
+    }
   }
 
   /**
@@ -628,14 +643,12 @@ export class BAP {
    * @param tx
    * @returns {Promise<boolean|*>}
    */
-  async isValidAttestationTransaction(tx: string[]): Promise<any> {
-    // first we test locally before sending to server
+  async isValidAttestationTransaction(tx: string[]): Promise<AttestationValidResponse | false> {
     if (this.verifyAttestationWithAIP(tx)) {
-      return this.getApiData("/attestation/valid", {
+      return this.getApiData<AttestationValidResponse>("/attestation/valid", {
         tx,
       });
     }
-
     return false;
   }
 
@@ -646,7 +659,7 @@ export class BAP {
    * @returns {Promise<*>}
    */
   async getIdentityFromAddress(address: string): Promise<GetIdentityByAddressResponse> {
-    return this.getApiData("/identity/from-address", {
+    return this.getApiData<GetIdentityByAddressResponse>("/identity/from-address", {
       address,
     });
   }
@@ -657,8 +670,8 @@ export class BAP {
    * @param idKey
    * @returns {Promise<*>}
    */
-  async getIdentity(idKey: string): Promise<any> {
-    return this.getApiData("/identity/get", {
+  async getIdentity(idKey: string): Promise<GetIdentityResponse> {
+    return this.getApiData<GetIdentityResponse>("/identity/get", {
       idKey,
     });
   }
@@ -670,7 +683,7 @@ export class BAP {
    */
   async getAttestationsForHash(attestationHash: string): Promise<GetAttestationResponse> {
     // get all BAP ATTEST records for the given attestationHash
-    return this.getApiData("/attestations", {
+    return this.getApiData<GetAttestationResponse>("/attestations", {
       hash: attestationHash,
     });
   }
@@ -679,3 +692,5 @@ export class BAP {
 };
 
 export { BAP_ID };
+export type { Attestation, Identity, IdentityAttributes, PathPrefix };
+
