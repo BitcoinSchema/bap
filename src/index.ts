@@ -366,8 +366,11 @@ export class BAP {
 
   /**
    * Export identities. If no idKeys are provided, exports all identities.
+   * @param encrypted Whether to encrypt the export. Defaults to true
+   * @param idKeys Optional array of identity keys to export
+   * @returns A string if encrypted is true, otherwise an Identities object
    */
-  exportIds(encrypted?: true): string;
+  exportIds(encrypted?: true, idKeys?: string[]): string;
   exportIds(encrypted: false, idKeys?: string[]): Identities;
   exportIds(encrypted = true, idKeys?: string[]): Identities | string {
     const idData: Identities = {
