@@ -16,9 +16,11 @@ const { electrumEncrypt, electrumDecrypt } = ECIES;
 
 type Identities = {
   lastIdPath: string;
-  ids: Identity[];  // Changed from (HDIdentity | SingleKeyIdentity[])
+  ids: Identity[];
 };
 
+export type { HDIdentity, SingleKeyIdentity, Attestation, Identity, IdentityAttributes, PathPrefix };
+export { BAP_ID };
 
 /**
  * BAP class
@@ -275,7 +277,7 @@ export class BAP {
 
       let importId: BAP_ID;
 
-      if (this.isSingleKeyIdentity(id)) {
+      if (isSingleKeyIdentity(id)) {
         if (!isSingleKeyMode) {
           throw new Error("Cannot import single key identity in HD mode");
         }
@@ -285,14 +287,14 @@ export class BAP {
           id.identityAttributes,
           id.idSeed
         );
-      } else if (this.isHDIdentity(id)) {
+      } else if (isHDIdentity(id)) {
         if (isSingleKeyMode) {
           throw new Error("Cannot import HD identity in single key mode");
         }
         const hdKey = this.#HDPrivateKey as HD;
         importId = new BAP_ID(
           hdKey,
-          id.identityAttributes,  // Remove the type assertion
+          id.identityAttributes,
           id.idSeed
         );
         importId.rootPath = id.rootPath;
@@ -305,7 +307,7 @@ export class BAP {
       importId.BAP_TOKEN = this.#BAP_TOKEN;
       importId.import(id);
 
-      if (!isSingleKeyMode && this.isHDIdentity(id)) {
+      if (!isSingleKeyMode && isHDIdentity(id)) {
         if (lastIdPath === "") {
           lastIdPath = id.currentPath;
         }
@@ -365,9 +367,9 @@ export class BAP {
   /**
    * Export identities. If no idKeys are provided, exports all identities.
    */
-  exportIds(idKeys?: string[], encrypted?: true): string;
-  exportIds(idKeys: string[] | undefined, encrypted: false): Identities;
-  exportIds(idKeys?: string[], encrypted = true): Identities | string {
+  exportIds(encrypted?: true): string;
+  exportIds(encrypted: false, idKeys?: string[]): Identities;
+  exportIds(encrypted = true, idKeys?: string[]): Identities | string {
     const idData: Identities = {
       lastIdPath: this.#lastIdPath,
       ids: [],
@@ -390,33 +392,6 @@ export class BAP {
 
 
   /**
-   * Export a given ID from this instance for external storage
-   *
-   * By default this function will encrypt the data, using a derivative child of the main HD key
-   *
-   * @param idKey The key of the identity to export
-   * @param encrypted Whether the data should be encrypted (default true)
-   * @returns {[]|*}
-   */
-  // Overload signatures
-  exportId(idKey: string, encrypted?: true): string;
-  exportId(idKey: string, encrypted: false): Identities;
-  exportId(idKey: string, encrypted = true): Identities | string {
-    const idData: Identities = {
-      lastIdPath: this.#lastIdPath,
-      ids: [] as Identity[],
-    };
-
-    idData.ids.push(this.#ids[idKey].export());
-
-    if (encrypted) {
-      return this.encrypt(JSON.stringify(idData));
-    }
-
-    return idData
-  }
-
-  /**
    * Encrypt a string of data
    *
    * @param string
@@ -428,7 +403,7 @@ export class BAP {
     }
     const derivedChild = this.#HDPrivateKey.derive(ENCRYPTION_PATH);
     return toBase64(
-      electrumEncrypt(toArray(string), derivedChild.pubKey, undefined),  // Changed null to undefined
+      electrumEncrypt(toArray(string), derivedChild.pubKey),
     );
   }
 
@@ -754,24 +729,13 @@ export class BAP {
     });
   }
 
-  private isSingleKeyIdentity(id: Identity): id is SingleKeyIdentity {
-    return 'derivedPrivateKey' in id;
-  }
-
-  private isHDIdentity(id: Identity): id is HDIdentity {
-    return 'rootPath' in id && 'currentPath' in id && 'previousPath' in id;
-  }
-
 };
 
-export { BAP_ID };
-export type { Attestation, Identity, IdentityAttributes, PathPrefix };
-
-function isSingleKeyIdentity(id: Identity): id is SingleKeyIdentity {
+export function isSingleKeyIdentity(id: Identity): id is SingleKeyIdentity {
   return 'derivedPrivateKey' in id;
 }
 
-function isHDIdentity(id: Identity): id is HDIdentity {
+export function isHDIdentity(id: Identity): id is HDIdentity {
   return 'rootPath' in id && 'currentPath' in id && 'previousPath' in id;
 }
 

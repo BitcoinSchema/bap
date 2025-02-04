@@ -35,13 +35,13 @@ const encryptedExport = bap.exportIds();
 
 // export specific identities
 const idKey = newId.getIdentityKey();
-const singleIdExport = bap.exportIds([idKey]);
+const singleIdExport = bap.exportIds(true, [idKey]);
 
 // export multiple specific identities
-const multipleIdExport = bap.exportIds([idKey1, idKey2]);
+const multipleIdExport = bap.exportIds(true, [idKey1, idKey2]);
 
 // export unencrypted
-const unencryptedExport = bap.exportIds(undefined, false);
+const unencryptedExport = bap.exportIds(false);
 ```
 
 Signing:
