@@ -1,25 +1,19 @@
 {
   "compilerOptions": {
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "esnext"
-    ],
+    "lib": ["dom", "dom.iterable", "esnext"],
     "target": "ESNext",
     "module": "ESNext",
     "declaration": true,
+    "declarationDir": "./dist",
     "outDir": "./dist",
     "noEmit": false,
     "strict": true,
     "moduleResolution": "Bundler",
-    "typeRoots": [
-      "./node_modules/@types",
-      "./types"
-    ],
+    "typeRoots": ["./node_modules/@types", "./types"],
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
+    "forceConsistentCasingInFileNames": true
   },
   "exclude": ["node_modules", "./dist", "src/**/*.test.ts"],
-  "include": ["src/**/*"],
+  "include": ["src/**/*"]
 }

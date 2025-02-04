@@ -1,5 +1,5 @@
-import randomBytes from "randombytes";
-import type {PathPrefix} from "./interface";
+import { randomBytes } from 'node:crypto';
+import type { PathPrefix } from "./interface.js";
 
 export const Utils = {
   /**
