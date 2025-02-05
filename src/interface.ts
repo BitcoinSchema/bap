@@ -22,7 +22,7 @@ export interface OldIdentity extends BaseIdentity {
 }
 
 // HD Key based identity
-export interface HDIdentity extends BaseIdentity {
+export interface MasterIdentity extends BaseIdentity {
   rootPath: string;
   currentPath: string;
   previousPath: string;
@@ -30,11 +30,11 @@ export interface HDIdentity extends BaseIdentity {
 }
 
 // Single key based identity
-export interface SingleKeyIdentity extends BaseIdentity {
+export interface MemberIdentity extends BaseIdentity {
   derivedPrivateKey: string;
 }
 
-export type Identity = HDIdentity | SingleKeyIdentity;
+export type Identity = MasterIdentity | MemberIdentity;
 
 // Container for storing identities
 export interface Identities {

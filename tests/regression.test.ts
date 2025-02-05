@@ -3,14 +3,14 @@ import {
   expect,
   it,
 } from 'bun:test';
-import { BAP } from '../src';
+import { MasterID } from '../src';
 
 import testVectors from './data/test-vectors.json';
 
 describe('test-vectors', () => {
   it('regression', () => {
     for (const v of testVectors) {
-      const bap = new BAP(v.HDPrivateKey);
+      const bap = new MasterID(v.HDPrivateKey);
       const id = bap.newId();
       expect(id.rootAddress).toBe(v.rootAddress);
       expect(id.getIdentityKey()).toBe(v.idKey);

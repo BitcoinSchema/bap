@@ -1,6 +1,5 @@
 import { describe, expect, beforeEach, test } from "bun:test";
-import { BAP } from "../src";
-import { BAP_ID } from "../src/id";
+import { MasterID } from "../src";
 import { HDPrivateKey } from "./data/keys";
 import { HD, PrivateKey } from "@bsv/sdk";
 import {
@@ -8,8 +7,9 @@ import {
 	AIP_BITCOM_ADDRESS_HEX,
 	SIGNING_PATH_PREFIX,
 } from "../src/constants";
+import type { IdentityAttributes } from "../src/interface";
 
-const identityAttributes = {
+const identityAttributes: IdentityAttributes = {
 	name: {
 		value: "John Doe",
 		nonce: "e2c6fb4063cc04af58935737eaffc938011dff546d47b7fbb18ed346f8c4d4fa",
@@ -24,10 +24,10 @@ const identityAttributeStrings = `
     urn:bap:id:email:john.doe@example.com:2864fd138ab1e9ddaaea763c77a45898dac64a26229f9f3d0f2280e4bfa915de
 `;
 
-let bap: InstanceType<typeof BAP>;
+let bap: InstanceType<typeof MasterID>;
 describe("bap-id", () => {
 	beforeEach(() => {
-		bap = new BAP(HDPrivateKey);
+		bap = new MasterID(HDPrivateKey);
 	});
 
 	test("new id", () => {
@@ -40,7 +40,7 @@ describe("bap-id", () => {
 	});
 
 	test("new id with known key", () => {
-		const userId = new BAP_ID(HD.fromString(HDPrivateKey));
+		const userId = new MasterID(HD.fromString(HDPrivateKey));
 		const rootAddress = userId.rootAddress;
 		const identityKey = userId.getIdentityKey();
 		expect(rootAddress).toBe("1CSJiMMYzfW8gbhXXNYyEJ1NsWJohLXyet");
@@ -48,13 +48,13 @@ describe("bap-id", () => {
 	});
 
 	test("new id with seeded keys", () => {
-		const userId = new BAP_ID(HD.fromString(HDPrivateKey), {}, "test");
+		const userId = new MasterID(HD.fromString(HDPrivateKey), {}, "test");
 		const rootAddress = userId.rootAddress;
 		const identityKey = userId.getIdentityKey();
 		expect(rootAddress).toBe("189oxMiD6wFA4nD38CkoWBKragxXUfw26J");
 		expect(identityKey).toBe("ffw3VszEVByph2DuHUiswEMNjRm");
 
-		const userId2 = new BAP_ID(HD.fromString(HDPrivateKey), {}, "testing 123");
+		const userId2 = new MasterID(HD.fromString(HDPrivateKey), {}, "testing 123");
 		const rootAddress2 = userId2.rootAddress;
 		const identityKey2 = userId2.getIdentityKey();
 		expect(rootAddress2).toBe("18zrzzv2Nieve7QAj2AwGDcPYyBziz8vWk");
@@ -62,7 +62,7 @@ describe("bap-id", () => {
 	});
 
 	test("set BAP_SERVER", () => {
-		const bap = new BAP(HDPrivateKey);
+		const bap = new MasterID(HDPrivateKey);
 		const id = bap.newId();
 		expect(id.BAP_SERVER).toBe("https://api.sigmaidentity.com/v1");
 
@@ -71,54 +71,34 @@ describe("bap-id", () => {
 		expect(id.BAP_SERVER).toBe(newServer);
 	});
 
-	test("parseAttributes", () => {
-		const bapId = bap.newId();
-		const parsed = bapId.parseAttributes(identityAttributes);
-		expect(parsed).toStrictEqual(identityAttributes);
+	test("identity attributes", () => {
+		// Test creating new ID with attributes
+		const bapId = bap.newId(identityAttributeStrings);
+		expect(bapId.getAttributes()).toStrictEqual(identityAttributes);
 
-		const parsed2 = bapId.parseAttributes(identityAttributeStrings);
-		expect(parsed2).toStrictEqual(identityAttributes);
-	});
-
-	test("parseStringUrns", () => {
-		const bapId = bap.newId();
-		const parsed = bapId.parseStringUrns(identityAttributeStrings);
-		expect(parsed).toStrictEqual(identityAttributes);
-
-		expect(() => {
-			// @ts-ignore - intentionally passing wrong type
-			bapId.parseStringUrns({ value: "John Doe", nonce: "" });
-		}).toThrow();
-	});
-
-	test("attributes", () => {
-		const bapId = bap.newId(undefined, identityAttributes);
-		bapId.addAttribute("birthday", "1990-05-22"); // nonce will be automatically generated
-		bapId.addAttribute(
+		// Test adding attributes
+		const bapId2 = bap.newId();
+		bapId2.addAttribute("birthday", "1990-05-22"); // nonce will be automatically generated
+		bapId2.addAttribute(
 			"over18",
 			"1",
 			"ca17ccaacd671b28dc811332525f2f2cd594d8e8e7825de515ce5d52d30e8",
 		);
 
-		expect(bapId.getAttribute("name")?.value).toBe("John Doe");
-		expect(bapId.getAttribute("name")?.nonce).toBe(
-			"e2c6fb4063cc04af58935737eaffc938011dff546d47b7fbb18ed346f8c4d4fa",
-		);
+		expect(bapId2.getAttribute("birthday")?.value).toBe("1990-05-22");
+		expect(typeof bapId2.getAttribute("birthday")?.nonce).toBe("string");
+		expect(bapId2.getAttribute("birthday")?.nonce).toHaveLength(64);
 
-		expect(bapId.getAttribute("birthday")?.value).toBe("1990-05-22");
-		expect(typeof bapId.getAttribute("birthday")?.nonce).toBe("string");
-		expect(bapId.getAttribute("birthday")?.nonce).toHaveLength(64);
-
-		expect(bapId.getAttribute("over18")?.value).toBe("1");
-		expect(bapId.getAttribute("over18")?.nonce).toBe(
+		expect(bapId2.getAttribute("over18")?.value).toBe("1");
+		expect(bapId2.getAttribute("over18")?.nonce).toBe(
 			"ca17ccaacd671b28dc811332525f2f2cd594d8e8e7825de515ce5d52d30e8",
 		);
 
-		expect(bapId.getAttribute("over21")).toBe(null);
+		expect(bapId2.getAttribute("over21")).toBe(null);
 	});
 
 	test("getAttributeUrns", () => {
-		const bapId = bap.newId(undefined, identityAttributes);
+		const bapId = bap.newId(identityAttributeStrings);
 
 		const expectedName =
 			"urn:bap:id:name:John Doe:e2c6fb4063cc04af58935737eaffc938011dff546d47b7fbb18ed346f8c4d4fa";
@@ -134,7 +114,7 @@ urn:bap:id:email:john.doe@example.com:2864fd138ab1e9ddaaea763c77a45898dac64a2622
 
 	test("incrementPath", () => {
 		const randomHDPrivateKey = HD.fromRandom();
-		const bapId = new BAP_ID(randomHDPrivateKey);
+		const bapId = new MasterID(randomHDPrivateKey);
 
 		expect(bapId.currentPath).toBe(`${SIGNING_PATH_PREFIX}/0/0/1`);
 		bapId.incrementPath();
@@ -165,7 +145,7 @@ urn:bap:id:email:john.doe@example.com:2864fd138ab1e9ddaaea763c77a45898dac64a2622
 	});
 
 	test("getAttestation / Hash", () => {
-		const bapId = bap.newId(undefined, identityAttributes);
+		const bapId = bap.newId(identityAttributes);
 		const urn = bapId.getAttributeUrn("name");
 		expect(urn).not.toBeNull();
 		expect(urn).toBe(
@@ -183,7 +163,7 @@ urn:bap:id:email:john.doe@example.com:2864fd138ab1e9ddaaea763c77a45898dac64a2622
 	});
 
 	test("getInitialIdTransaction", () => {
-		const bapId = bap.newId(undefined, identityAttributes);
+		const bapId = bap.newId(identityAttributes);
 		const tx = bapId.getInitialIdTransaction();
 		expect(`0x${tx[0]}`).toBe(BAP_BITCOM_ADDRESS_HEX);
 		expect(tx[1]).toBe(Buffer.from("ID").toString("hex"));
@@ -201,7 +181,7 @@ urn:bap:id:email:john.doe@example.com:2864fd138ab1e9ddaaea763c77a45898dac64a2622
 	});
 
 	test("encryption public keys", () => {
-		const bapId = bap.newId(undefined, identityAttributes);
+		const bapId = bap.newId(identityAttributes);
 		const pubKey = bapId.getEncryptionPublicKey();
 		expect(pubKey).toBe(
 			"02a257adfbba04a25a7c37600209a0926aa264428b2d3d2b17fa97cf9c31b87cdf",
@@ -214,7 +194,7 @@ urn:bap:id:email:john.doe@example.com:2864fd138ab1e9ddaaea763c77a45898dac64a2622
 	});
 
 	test("encryption", () => {
-		const bapId = bap.newId(undefined, identityAttributes);
+		const bapId = bap.newId(identityAttributes);
 		const pubKey = bapId.getEncryptionPublicKey();
 		expect(pubKey).toBe(
 			"02a257adfbba04a25a7c37600209a0926aa264428b2d3d2b17fa97cf9c31b87cdf",
@@ -229,29 +209,8 @@ urn:bap:id:email:john.doe@example.com:2864fd138ab1e9ddaaea763c77a45898dac64a2622
 		expect(testData === decrypted).toBe(true);
 	});
 
-  // TODO: This will fail until this issue is resolved:
-  // https://github.com/bitcoin-sv/ts-sdk/issues/124
-	// test("encryption with counterparty", () => {
-	// 	const bapId = bap.newId(undefined, identityAttributes);
-	// 	const pubKey = bapId.getEncryptionPublicKey();
-	// 	expect(pubKey).toBe(
-	// 		"02a257adfbba04a25a7c37600209a0926aa264428b2d3d2b17fa97cf9c31b87cdf",
-	// 	);
-
-	// 	const counterPartyKey = PrivateKey.fromRandom().toPublicKey().toString();
-
-	// 	const testData =
-	// 		"This is a test we are going to encrypt for the counterparty";
-	// 	const ciphertext = bapId.encrypt(testData, counterPartyKey);
-	// 	expect(typeof ciphertext).toBe("string");
-	// 	expect(testData === ciphertext).toBe(false);
-
-	// 	const decrypted = bapId.decrypt(ciphertext, counterPartyKey);
-	// 	expect(testData === decrypted).toBe(true);
-	// });
-
 	test("encryption with seed", () => {
-		const bapId = bap.newId(undefined, identityAttributes);
+		const bapId = bap.newId(identityAttributes);
 		const pubKey = bapId.getEncryptionPublicKey();
 		expect(pubKey).toBe(
 			"02a257adfbba04a25a7c37600209a0926aa264428b2d3d2b17fa97cf9c31b87cdf",
@@ -269,15 +228,13 @@ urn:bap:id:email:john.doe@example.com:2864fd138ab1e9ddaaea763c77a45898dac64a2622
 	});
 
 	test("encryption with seed with counterparty", () => {
-		const bapId = bap.newId(undefined, identityAttributes);
+		const bapId = bap.newId(identityAttributes);
 		const pubKey = bapId.getEncryptionPublicKey();
 		expect(pubKey).toBe(
 			"02a257adfbba04a25a7c37600209a0926aa264428b2d3d2b17fa97cf9c31b87cdf",
 		);
 
 		const seed = "test-seed";
-		// Not needed for decryption - can be derived from cyphertext
-		// const counterPartyKey = PrivateKey.fromRandom().toPublicKey().toString();
 
 		const testData = "This is a test we are going to encrypt";
 		const ciphertext = bapId.encryptWithSeed(testData, seed);

@@ -1,15 +1,21 @@
-import type { IdentityAttributes } from "./interface";
+/* eslint-disable @typescript-eslint/consistent-type-imports */
+
+/**
+ * @fileoverview Disable consistent-type-imports rule for BSV SDK imports
+ */
+
+import { type PrivateKey, BSM, Signature, BigNumber, Utils as BSVUtils, PublicKey, ECIES } from "@bsv/sdk";
+
+const { toArray, toBase64, toUTF8, toHex } = BSVUtils;
+
+import type { IdentityAttributes, MemberIdentity } from "./interface";
 import { IdentityBase } from "./identityBase";
-import { type PrivateKey, BSM, type Signature, BigNumber, Utils as BSVUtils } from "@bsv/sdk";
-import { Utils } from "./utils";
 
-const { toArray, toUTF8, toBase64 } = BSVUtils;
-
-export class MemberID extends IdentityBase {
-  private key: PrivateKey;
+export class MemberID extends IdentityBase implements MemberIdentity {
+  private readonly key: PrivateKey;
+  public idSeed = "";
 
   constructor(key: PrivateKey, attrs?: IdentityAttributes | string) {
-    // For single-key mode, use the public address from the key.
     super(attrs);
     this.key = key;
     this.rootAddress = key.toPublicKey().toAddress();
@@ -17,7 +23,7 @@ export class MemberID extends IdentityBase {
   }
 
   public signMessage(msg: string | Buffer): { address: string; signature: string } {
-    const address = this.key.toPublicKey().toAddress();
+    const address = this.key.toAddress();
     const msgBuffer = typeof msg === "string" ? Buffer.from(msg, "utf8") : msg;
     const msgArray = toArray(msgBuffer.toString("hex"), "hex");
     const dummySig = BSM.sign(msgArray, this.key, "raw") as Signature;
@@ -27,23 +33,81 @@ export class MemberID extends IdentityBase {
     return { address, signature };
   }
 
-  // The following encryption methods are not supported in single key mode.
+  public encrypt(stringData: string, encryptionKey: PrivateKey, counterPartyPublicKey?: string): string {
+    const publicKey = encryptionKey.toPublicKey();
+    const pubKey = counterPartyPublicKey ? PublicKey.fromString(counterPartyPublicKey) : publicKey;
+    return toBase64(ECIES.electrumEncrypt(toArray(stringData), pubKey, encryptionKey));
+  }
+
+  public decrypt(ciphertext: string, encryptionKey: PrivateKey, counterPartyPublicKey?: string): string {
+    let pubKey: PublicKey | undefined;
+    if (counterPartyPublicKey) {
+      pubKey = PublicKey.fromString(counterPartyPublicKey);
+    }
+    return toUTF8(ECIES.electrumDecrypt(toArray(ciphertext, "base64"), encryptionKey, pubKey));
+  }
+
+  export(): object {
+    return {
+      idSeed: this.idSeed || "",
+      rootAddress: this.rootAddress,
+      identityAttributes: this.identityAttributes,
+      derivedPrivateKey: this.derivedPrivateKey
+    };
+  }
+
+  get derivedPrivateKey(): string {
+    return this.key.toString();
+  }
+
+  public sign(message: string): string {
+    return this.signMessage(message).signature;
+  }
+
+  public verify(message: string, signature: string): boolean {
+    const address = this.key.toAddress();
+    return this.verifySignature(message, address, signature);
+  }
+
+  public verifySignature(message: string | Buffer, address: string, signature: string): boolean {
+    const msgBuffer = typeof message === "string" ? Buffer.from(message, "utf8") : message;
+    const msgArray = toArray(msgBuffer.toString("hex"), "hex");
+    try {
+      const sigFromCompact = Signature.fromCompact(signature, "base64");
+      for (let recovery = 0; recovery < 4; recovery++) {
+        try {
+          const publicKey = sigFromCompact.RecoverPublicKey(recovery, new BigNumber(BSM.magicHash(msgArray)));
+          if (BSM.verify(msgArray, sigFromCompact, publicKey) && publicKey.toAddress() === address) {
+            return true;
+          }
+        } catch (e) {
+          // try next recovery factor
+        }
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  public getPublicKey(): string {
+    return this.key.toPublicKey().toString();
+  }
+
+  // Implementing encryption methods for MemberID
   public getEncryptionPublicKey(): string {
-    throw new Error("Encryption not supported in single key mode");
+    return this.key.toPublicKey().toString();
   }
+
   public getEncryptionPublicKeyWithSeed(seed: string): string {
-    throw new Error("Encryption with seed not supported in single key mode");
+    throw new Error("HDPrivateKey not set");
   }
-  public encrypt(stringData: string, counterPartyPublicKey?: string): string {
-    throw new Error("Encryption not supported in single key mode");
+
+  public encryptWithSeed(stringData: string, seed: string): string {
+    throw new Error("HDPrivateKey not set");
   }
-  public decrypt(ciphertext: string, counterPartyPublicKey?: string): string {
-    throw new Error("Decryption not supported in single key mode");
-  }
-  public encryptWithSeed(stringData: string, seed: string, counterPartyPublicKey?: string): string {
-    throw new Error("Encryption with seed not supported in single key mode");
-  }
-  public decryptWithSeed(ciphertext: string, seed: string, counterPartyPublicKey?: string): string {
-    throw new Error("Decryption with seed not supported in single key mode");
+
+  public decryptWithSeed(ciphertext: string, seed: string): string {
+    throw new Error("HDPrivateKey not set");
   }
 }
