@@ -1,4 +1,5 @@
 import { BSM, Utils as BSVUtils, BigNumber, ECIES, type HD, Hash, PublicKey, type Signature } from "@bsv/sdk";
+
 import { type APIFetcher, apiFetcher } from "./api";
 import type { GetAttestationResponse, GetSigningKeysResponse } from "./apiTypes";
 import {
@@ -16,17 +17,18 @@ import type {
   OldIdentity,
 } from "./interface";
 import { Utils } from "./utils";
+import { MemberID, type MemberIdentity } from './MemberID';
 const { toArray, toHex, toBase58, toUTF8, toBase64 } = BSVUtils;
 const { electrumDecrypt, electrumEncrypt } = ECIES;
 const { magicHash } = BSM;
 /**
- * BAP_ID class
+ * MasterID class
  *
  * This class should be used in conjunction with the BAP class
  *
- * @type {BAP_ID}
+ * @type {MasterID}
  */
-class BAP_ID {
+class MasterID {
   #HDPrivateKey: HD;
   #BAP_SERVER: string = BAP_SERVER;
   #BAP_TOKEN = "";
@@ -805,6 +807,26 @@ class BAP_ID {
       lastIdPath: "",
     };
   }
+
+  // New method to export a member-friendly backup, containing only the derived signing key
+  exportMemberBackup(): MemberIdentity {
+    const derivedKey = this.#HDPrivateKey.derive(this.#currentPath).privKey;
+    return {
+      name: this.idName,
+      description: this.description,
+      derivedPrivateKey: derivedKey.toString(),
+      address: derivedKey.toPublicKey().toAddress(),
+      identityAttributes: this.getAttributes(),
+    };
+  }
+
+  // New method to derive a new member ID from the master HD key
+  public newId(): MemberID {
+    // Assuming incrementPath updates the internal current path
+    this.incrementPath();
+    const derivedKey = this.#HDPrivateKey.derive(this.#currentPath).privKey;
+    return new MemberID(derivedKey, this.getAttributes());
+  }
 }
 
-export { BAP_ID };
+export { MasterID };

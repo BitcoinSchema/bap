@@ -1,6 +1,6 @@
 import { describe, expect, beforeEach, test } from "bun:test";
 import { BAP } from "../src";
-import { BAP_ID } from "../src/id";
+import { MasterID } from "../src/MasterID";
 import { HDPrivateKey } from "./data/keys";
 import { HD, PrivateKey } from "@bsv/sdk";
 import {
@@ -40,7 +40,7 @@ describe("bap-id", () => {
 	});
 
 	test("new id with known key", () => {
-		const userId = new BAP_ID(HD.fromString(HDPrivateKey));
+		const userId = new MasterID(HD.fromString(HDPrivateKey));
 		const rootAddress = userId.rootAddress;
 		const identityKey = userId.getIdentityKey();
 		expect(rootAddress).toBe("1CSJiMMYzfW8gbhXXNYyEJ1NsWJohLXyet");
@@ -48,13 +48,13 @@ describe("bap-id", () => {
 	});
 
 	test("new id with seeded keys", () => {
-		const userId = new BAP_ID(HD.fromString(HDPrivateKey), {}, "test");
+		const userId = new MasterID(HD.fromString(HDPrivateKey), {}, "test");
 		const rootAddress = userId.rootAddress;
 		const identityKey = userId.getIdentityKey();
 		expect(rootAddress).toBe("189oxMiD6wFA4nD38CkoWBKragxXUfw26J");
 		expect(identityKey).toBe("ffw3VszEVByph2DuHUiswEMNjRm");
 
-		const userId2 = new BAP_ID(HD.fromString(HDPrivateKey), {}, "testing 123");
+		const userId2 = new MasterID(HD.fromString(HDPrivateKey), {}, "testing 123");
 		const rootAddress2 = userId2.rootAddress;
 		const identityKey2 = userId2.getIdentityKey();
 		expect(rootAddress2).toBe("18zrzzv2Nieve7QAj2AwGDcPYyBziz8vWk");
@@ -134,8 +134,9 @@ urn:bap:id:email:john.doe@example.com:2864fd138ab1e9ddaaea763c77a45898dac64a2622
 
 	test("incrementPath", () => {
 		const randomHDPrivateKey = HD.fromRandom();
-		const bapId = new BAP_ID(randomHDPrivateKey);
+		const bapId = new MasterID(randomHDPrivateKey);
 
+		expect(bapId.rootPath).toBe(`${SIGNING_PATH_PREFIX}/0/0/0`);
 		expect(bapId.currentPath).toBe(`${SIGNING_PATH_PREFIX}/0/0/1`);
 		bapId.incrementPath();
 		expect(bapId.previousPath).toBe(`${SIGNING_PATH_PREFIX}/0/0/1`);

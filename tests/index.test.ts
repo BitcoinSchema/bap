@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { BSM, BigNumber, HD, PrivateKey, type Signature, Utils } from "@bsv/sdk";
 import { BAP } from "../src";
 import { ENCRYPTION_PATH, SIGNING_PATH_PREFIX } from "../src/constants";
-import { BAP_ID } from "../src/id";
+import { MasterID } from "../src/MasterID";
 import type { Identities, OldIdentity } from "../src/interface";
 import fullId from "./data/ids.json";
 import { HDPrivateKey, HDPublicKey } from "./data/keys";
@@ -95,7 +95,7 @@ describe("BAP class", () => {
 
     const importedId = bap.getId(identityKey);
     expect(importedId).not.toBeNull();
-    expect(importedId).toBeInstanceOf(BAP_ID);
+    expect(importedId).toBeInstanceOf(MasterID);
     expect(importedId?.getIdentityKey()).toBe(identityKey);
   });
 
@@ -109,7 +109,7 @@ describe("BAP class", () => {
 
     const importedId = bap.getId(identityKey);
     expect(importedId).not.toBeNull();
-    expect(importedId).toBeInstanceOf(BAP_ID);
+    expect(importedId).toBeInstanceOf(MasterID);
     expect(importedId?.getIdentityKey()).toBe(identityKey);
   });
 
@@ -139,7 +139,7 @@ describe("BAP class", () => {
     expect(bap2.listIds()).toStrictEqual([identityKey]);
 
     const importedId = bap2.getId(identityKey);
-    expect(importedId).toBeInstanceOf(BAP_ID);
+    expect(importedId).toBeInstanceOf(MasterID);
     expect(importedId?.getIdentityKey()).toBe(identityKey);
   });
 
@@ -192,27 +192,27 @@ describe("BAP class", () => {
     const randomHDPrivateKey = HD.fromRandom().toString();
     const bap = new BAP(randomHDPrivateKey);
     const newId = bap.newId();
-    expect(newId).toBeInstanceOf(BAP_ID);
+    expect(newId).toBeInstanceOf(MasterID);
     expect(bap.checkIdBelongs(newId)).toBe(true);
     expect(newId.rootPath).toBe(`${SIGNING_PATH_PREFIX}/0'/0'/0'`);
     expect(newId.currentPath).toBe(`${SIGNING_PATH_PREFIX}/0'/0'/1'`);
 
     const newId2 = bap.newId("/123/124/0");
-    expect(newId2).toBeInstanceOf(BAP_ID);
+    expect(newId2).toBeInstanceOf(MasterID);
     expect(bap.checkIdBelongs(newId2)).toBe(true);
     expect(newId2.rootPath).toBe(`${SIGNING_PATH_PREFIX}/123/124/0`);
     expect(newId2.currentPath).toBe(`${SIGNING_PATH_PREFIX}/123/124/1`);
 
     // Hardened path given
     const newId3 = bap.newId(`/123'/124'/0`);
-    expect(newId3).toBeInstanceOf(BAP_ID);
+    expect(newId3).toBeInstanceOf(MasterID);
     expect(bap.checkIdBelongs(newId3)).toBe(true);
     expect(newId3.rootPath).toBe(`${SIGNING_PATH_PREFIX}/123'/124'/0`);
     expect(newId3.currentPath).toBe(`${SIGNING_PATH_PREFIX}/123'/124'/1`);
 
     // Hardened full path given
     const newId4 = bap.newId(`/123'/124'/0'`);
-    expect(newId4).toBeInstanceOf(BAP_ID);
+    expect(newId4).toBeInstanceOf(MasterID);
     expect(bap.checkIdBelongs(newId4)).toBe(true);
     expect(newId4.rootPath).toBe(`${SIGNING_PATH_PREFIX}/123'/124'/0'`);
     expect(newId4.currentPath).toBe(`${SIGNING_PATH_PREFIX}/123'/124'/1'`);
@@ -250,7 +250,7 @@ describe("BAP class", () => {
     const bap = new BAP(HDPrivateKey);
     bap.importIds(fullId, false);
 
-    const userId = new BAP_ID(HD.fromString(HDPrivateKey), {
+    const userId = new MasterID(HD.fromString(HDPrivateKey), {
       name: {
         value: "John Doe",
         nonce:
@@ -278,7 +278,7 @@ describe("BAP class", () => {
     const bap = new BAP(HDPrivateKey);
     bap.importIds(fullId, false);
 
-    const userId = new BAP_ID(HD.fromString(HDPrivateKey), {
+    const userId = new MasterID(HD.fromString(HDPrivateKey), {
       name: {
         value: "John Doe",
         nonce:

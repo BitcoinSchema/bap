@@ -10,7 +10,7 @@ import {
   BAP_SERVER,
   ENCRYPTION_PATH,
 } from "./constants";
-import { BAP_ID } from "./id";
+import { MasterID } from "./MasterID";
 import type { Attestation, Identity, IdentityAttributes, OldIdentity, PathPrefix } from "./interface";
 import { Utils } from "./utils";
 const { toArray, toUTF8, toBase64 } = BSVUtils;
@@ -28,13 +28,11 @@ type Identities = { lastIdPath: string; ids: Identity[] };
  */
 export class BAP {
   #HDPrivateKey;
-  #ids: { [key: string]: BAP_ID } = {};
+  #ids: { [key: string]: MasterID } = {};
   #BAP_SERVER = BAP_SERVER;
   #BAP_TOKEN = "";
   #lastIdPath = "";
   getApiData: APIFetcher;
-
-
 
   constructor(HDPrivateKey: string, token = "", server = "") {
     if (!HDPrivateKey) {
@@ -112,9 +110,9 @@ export class BAP {
    * This function verifies that the given bapId matches the given root address
    * This is used as a data integrity check
    *
-   * @param bapId BAP_ID instance
+   * @param bapId MasterID instance
    */
-  checkIdBelongs(bapId: BAP_ID): boolean {
+  checkIdBelongs(bapId: MasterID): boolean {
     const derivedChild = this.#HDPrivateKey.derive(bapId.rootPath);
     const checkRootAddress = derivedChild.pubKey.toAddress();
     if (checkRootAddress !== bapId.rootAddress) {
@@ -145,7 +143,7 @@ export class BAP {
    * @param idSeed
    * @returns {*}
    */
-  newId(path?: string, identityAttributes: IdentityAttributes = {}, idSeed = ""): BAP_ID {
+  newId(path?: string, identityAttributes: IdentityAttributes = {}, idSeed = ""): MasterID {
     let pathToUse: string;
     if (!path) {
       // get next usable path for this key
@@ -154,7 +152,7 @@ export class BAP {
       pathToUse = path;
     }
 
-    const newIdentity = new BAP_ID(
+    const newIdentity = new MasterID(
       this.#HDPrivateKey,
       identityAttributes,
       idSeed,
@@ -202,7 +200,7 @@ export class BAP {
    * @param identityKey
    * @returns {null}
    */
-  getId(identityKey: string): BAP_ID | null {
+  getId(identityKey: string): MasterID | null {
     return this.#ids[identityKey] || null;
   }
 
@@ -217,7 +215,7 @@ export class BAP {
    *
    * @param bapId
    */
-  setId(bapId: BAP_ID): void {
+  setId(bapId: MasterID): void {
     this.checkIdBelongs(bapId);
     this.#ids[bapId.getIdentityKey()] = bapId;
   }
@@ -249,7 +247,7 @@ export class BAP {
       if (!id.identityKey || !id.identityAttributes || !id.rootAddress) {
         throw new Error("ID cannot be imported as it is not complete");
       }
-      const importId = new BAP_ID(this.#HDPrivateKey, {}, id.idSeed);
+      const importId = new MasterID(this.#HDPrivateKey, {}, id.idSeed);
       importId.BAP_SERVER = this.#BAP_SERVER;
       importId.BAP_TOKEN = this.#BAP_TOKEN;
       importId.import(id);
@@ -283,7 +281,7 @@ export class BAP {
 
   importOldIds(idData: OldIdentity[]): void {
     for (const id of idData) {
-      const importId = new BAP_ID(
+      const importId = new MasterID(
         this.#HDPrivateKey,
         {},
         id.idSeed ?? ""
@@ -386,7 +384,7 @@ export class BAP {
   /**
    * Sign an attestation for a user
    *
-   * @param attestationHash The computed attestation hash for the user - this should be calculated with the BAP_ID class for an identity for the user
+   * @param attestationHash The computed attestation hash for the user - this should be calculated with the MasterID class for an identity for the user
    * @param identityKey The identity key we are using for the signing
    * @param counter
    * @param dataString Optional data string that will be appended to the BAP attestation
@@ -692,6 +690,6 @@ export class BAP {
 
 };
 
-export { BAP_ID };
+export { MasterID };
 export type { Attestation, Identity, IdentityAttributes, PathPrefix };
 
