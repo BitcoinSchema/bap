@@ -24,7 +24,7 @@ class MemberID {
       // If identityAttributes is a string, parse it using parseStringUrns, otherwise use as is
       this.identityAttributes = typeof identityAttributes === 'string' ? this.parseStringUrns(identityAttributes) : identityAttributes;
       this.address = this.key.toAddress();
-      this.idName = "Member ID";
+      this.idName = "Member ID 1";
       this.description = "";
     }
 
@@ -53,6 +53,12 @@ class MemberID {
       this.key = PrivateKey.fromString(identity.derivedPrivateKey);
       this.address = this.key.toAddress();
       this.identityAttributes = identity.identityAttributes;
+    }
+
+    static fromImport(identity: MemberIdentity): MemberID {
+      const member = new MemberID(PrivateKey.fromString(identity.derivedPrivateKey));
+      member.import(identity);
+      return member;
     }
 
     // Export the member identity as an object containing the derived private key and identity data
