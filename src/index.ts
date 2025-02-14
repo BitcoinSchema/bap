@@ -1,4 +1,4 @@
-import { BSM, BigNumber, ECIES, HD, type PublicKey, Signature } from "@bsv/sdk";
+import { BSM, BigNumber, ECIES, HD, OP, type PublicKey, Signature } from "@bsv/sdk";
 
 import { Utils as BSVUtils } from "@bsv/sdk";
 import { type APIFetcher, apiFetcher } from "./api";
@@ -14,7 +14,7 @@ import { MasterID } from "./MasterID";
 import type { Attestation, Identity, IdentityAttributes, OldIdentity, PathPrefix } from "./interface";
 import { Utils } from "./utils";
 import { MemberID } from "./MemberID";
-const { toArray, toUTF8, toBase64 } = BSVUtils;
+const { toArray, toUTF8, toBase64, toHex } = BSVUtils;
 const { electrumEncrypt, electrumDecrypt } = ECIES;
 
 type Identities = { lastIdPath: string; ids: Identity[] };
@@ -437,40 +437,40 @@ export class BAP {
    * @param tx Array of hex values for the OP_RETURN values
    * @returns {{}}
    */
-  verifyAttestationWithAIP(tx: string[]): Attestation {
+  verifyAttestationWithAIP(tx: number[][]): Attestation {
     if (
-      !Array.isArray(tx) ||
-      tx[0] !== "0x6a" ||
-      tx[1] !== BAP_BITCOM_ADDRESS_HEX
+      !tx.every((t) => Array.isArray(t)) ||
+      tx[0][0] !== OP.OP_RETURN ||
+      toHex(tx[1]) !== BAP_BITCOM_ADDRESS_HEX
     ) {
       throw new Error("Not a valid BAP transaction");
     }
-
-    const dataOffset = tx[7] === "0x44415441" ? 5 : 0; // DATA
+    const dataOffset = toHex(tx[7]) === "44415441" ? 5 : 0; // DATA
     const attestation: Attestation = {
-      type: Utils.hexDecode(tx[2]),
-      hash: Utils.hexDecode(tx[3]),
-      sequence: Utils.hexDecode(tx[4]),
-      signingProtocol: Utils.hexDecode(tx[7 + dataOffset]),
-      signingAddress: Utils.hexDecode(tx[8 + dataOffset]),
-      signature: Utils.hexDecode(tx[9 + dataOffset], "base64"),
+      type: toUTF8(tx[2]),
+      hash: toHex(tx[3]),
+      sequence: toUTF8(tx[4]),
+      signingProtocol: toUTF8(tx[7 + dataOffset]),
+      signingAddress: toUTF8(tx[8 + dataOffset]),
+      signature: toBase64(tx[9 + dataOffset]),
     };
 
+    
     if (dataOffset && tx[3] === tx[8]) {
       // valid data addition
-      attestation.data = Utils.hexDecode(tx[9]);
+      attestation.data = toHex(tx[9]);
     }
 
+    console.log({attestation})
+
     try {
-      const signatureBufferStatements: Buffer[] = [];
+      const signatureBufferStatements: number[][] = [];
       for (let i = 0; i < 6 + dataOffset; i++) {
-        signatureBufferStatements.push(
-          Buffer.from(tx[i].replace("0x", ""), "hex"),
-        );
+        signatureBufferStatements.push(tx[i]);
       }
-      const attestationBuffer = Buffer.concat(signatureBufferStatements as unknown as Uint8Array[]);
+      // const attestationBuffer = Buffer.concat(signatureBufferStatements as unknown as Uint8Array[]);
       attestation.verified = this.verifySignature(
-        attestationBuffer,
+        signatureBufferStatements.flat(),
         attestation.signingAddress,
         attestation.signature,
       );
@@ -489,7 +489,7 @@ export class BAP {
    * @param address
    * @param signature
    * @param dataString Optional data string that will be appended to the BAP attestation
-   * @returns {[string]}
+   * @returns {number[]}
    */
   createAttestationTransaction(
     attestationHash: string,
@@ -497,26 +497,36 @@ export class BAP {
     address: string,
     signature: string,
     dataString = "",
-  ): string[] {
-    const transaction = ["0x6a", Utils.hexEncode(BAP_BITCOM_ADDRESS)];
-    transaction.push(Utils.hexEncode("ATTEST"));
-    transaction.push(Utils.hexEncode(attestationHash));
-    transaction.push(Utils.hexEncode(`${counter}`));
-    transaction.push("0x7c"); // |
+  ): number[][] {
+    const elements: number[][] = [
+      [OP.OP_RETURN],
+      toArray(BAP_BITCOM_ADDRESS),
+      toArray("ATTEST"),
+      toArray(attestationHash),
+      toArray(`${counter}`),
+      toArray("|"),
+    ];
+
     if (dataString) {
       // data should be a string, either encrypted or stringified JSON if applicable
-      transaction.push(Utils.hexEncode(BAP_BITCOM_ADDRESS));
-      transaction.push(Utils.hexEncode("DATA"));
-      transaction.push(Utils.hexEncode(attestationHash));
-      transaction.push(Utils.hexEncode(dataString));
-      transaction.push("0x7c"); // |
+      elements.push(
+        toArray(BAP_BITCOM_ADDRESS),
+        toArray("DATA"),
+        toArray(attestationHash),
+        toArray(dataString),
+        toArray("|"),
+      );
     }
-    transaction.push(Utils.hexEncode(AIP_BITCOM_ADDRESS));
-    transaction.push(Utils.hexEncode("BITCOIN_ECDSA"));
-    transaction.push(Utils.hexEncode(address));
-    transaction.push(`0x${Buffer.from(signature, "base64").toString("hex")}`);
 
-    return transaction;
+    elements.push(
+      toArray(AIP_BITCOM_ADDRESS),
+      toArray("BITCOIN_ECDSA"),
+      toArray(address),
+      toArray(signature, "base64"),
+    );
+
+    console.log({elements})
+    return elements;
   }
 
   /**
@@ -525,56 +535,63 @@ export class BAP {
    * @param attestationHash
    * @param counter
    * @param dataString Optional data string
-   * @returns {Buffer}
+   * @returns {number[]}
    */
   getAttestationBuffer(
     attestationHash: string,
     counter = 0,
     dataString = "",
-  ): Buffer {
+  ): number[] {
     // re-create how AIP creates the buffer to sign
-    let dataStringBuffer = Buffer.from("");
+    const elements = [
+      [OP.OP_RETURN],
+      toArray(BAP_BITCOM_ADDRESS),
+      toArray("ATTEST"),
+      toArray(attestationHash),
+      toArray(`${counter}`),
+      toArray("|"),
+    ];
+
     if (dataString) {
-      dataStringBuffer = Buffer.concat([
-        Buffer.from(BAP_BITCOM_ADDRESS) as unknown as Uint8Array,
-        Buffer.from("DATA") as unknown as Uint8Array,
-        Buffer.from(attestationHash) as unknown as Uint8Array,
-        Buffer.from(dataString) as unknown as Uint8Array,
-        Buffer.from("7c", "hex") as unknown as Uint8Array,
-      ]);
+      elements.push(
+        toArray(BAP_BITCOM_ADDRESS),
+        toArray("DATA"),
+        toArray(attestationHash),
+        toArray(dataString),
+        toArray("|"),
+      );
     }
-    return Buffer.concat([
-      Buffer.from("6a", "hex") as unknown as Uint8Array, // OP_RETURN
-      Buffer.from(BAP_BITCOM_ADDRESS) as unknown as Uint8Array,
-      Buffer.from("ATTEST") as unknown as Uint8Array,
-      Buffer.from(attestationHash) as unknown as Uint8Array,
-      Buffer.from(`${counter}`) as unknown as Uint8Array,
-      Buffer.from("7c", "hex") as unknown as Uint8Array,
-      dataStringBuffer as unknown as Uint8Array,
-    ]);
+
+    return elements.flat();
   }
 
   /**
    * Verify that the identity challenge is signed by the address
    *
-   * @param message Buffer or utf-8 string
+   * @param message Buffer, number[] or utf-8 string
    * @param address Bitcoin address of signee
    * @param signature Signature base64 string
    *
    * @return boolean
    */
   verifySignature(
-    message: string | Buffer,
+    message: string | number[],
     address: string,
     signature: string,
   ): boolean {
-    // check the signature against the challenge
-    const messageBuffer = Buffer.isBuffer(message)
-      ? message
-      : Buffer.from(message);
+    // Convert message to number[]
+    let msg: number[];
+    if (Array.isArray(message)) {
+      msg = message;
+    } else if (Buffer.isBuffer(message)) {
+      msg = [...message];
+    } else {
+      msg = toArray(message, "utf8");
+    }
+
     const sig = Signature.fromCompact(signature, "base64");
     let publicKey: PublicKey | undefined;
-    const msg = toArray(messageBuffer.toString("hex"), "hex");
+    
     for (let recovery = 0; recovery < 4; recovery++) {
       try {
         publicKey = sig.RecoverPublicKey(
@@ -643,7 +660,7 @@ export class BAP {
    * @param tx
    * @returns {Promise<boolean|*>}
    */
-  async isValidAttestationTransaction(tx: string[]): Promise<AttestationValidResponse | false> {
+  async isValidAttestationTransaction(tx: number[][]): Promise<AttestationValidResponse | false> {
     if (this.verifyAttestationWithAIP(tx)) {
       return this.getApiData<AttestationValidResponse>("/attestation/valid", {
         tx,

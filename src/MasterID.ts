@@ -18,6 +18,7 @@ import type {
 } from "./interface";
 import { Utils } from "./utils";
 import { MemberID, type MemberIdentity } from './MemberID';
+import { BaseClass } from "./BaseClass";
 const { toArray, toHex, toBase58, toUTF8, toBase64 } = BSVUtils;
 const { electrumDecrypt, electrumEncrypt } = ECIES;
 const { magicHash } = BSM;
@@ -28,7 +29,7 @@ const { magicHash } = BSM;
  *
  * @type {MasterID}
  */
-class MasterID {
+class MasterID extends BaseClass {
   #HDPrivateKey: HD;
   #BAP_SERVER: string = BAP_SERVER;
   #BAP_TOKEN = "";
@@ -51,7 +52,8 @@ class MasterID {
     identityAttributes: IdentityAttributes = {},
     idSeed = "",
   ) {
-    this.#idSeed = idSeed;
+    super();
+    
     if (idSeed) {
       // create a new HDPrivateKey based on the seed
       const seedHex = toHex(Hash.sha256(idSeed, "utf8"));
@@ -61,6 +63,7 @@ class MasterID {
       this.#HDPrivateKey = HDPrivateKey;
     }
 
+    this.#idSeed = idSeed;
     this.idName = "ID 1";
     this.description = "";
 
@@ -446,10 +449,10 @@ class MasterID {
     }
 
     const opReturn = [
-      Buffer.from(BAP_BITCOM_ADDRESS).toString("hex"),
-      Buffer.from("ID").toString("hex"),
-      Buffer.from(this.identityKey).toString("hex"),
-      Buffer.from(this.getCurrentAddress()).toString("hex"),
+      toArray(BAP_BITCOM_ADDRESS),
+      toArray("ID"),
+      toArray(this.identityKey),
+      toArray(this.getCurrentAddress()),
     ];
 
     return this.signOpReturnWithAIP(
@@ -605,29 +608,22 @@ class MasterID {
    * @param signingPath
    * @returns {{address: string, signature: string}}
    */
-  signMessage(message: string | Buffer, signingPath = ""): { address: string, signature: string } {
-    let msg: Buffer;
-    if (!(message instanceof Buffer)) {
-      msg = Buffer.from(message);
-    } else {
-      msg = message;
-    }
-
+  signMessage(message: number[], signingPath?: string): { address: string; signature: string } {
     const pathToUse = signingPath || this.#currentPath;
     const childPk = this.#HDPrivateKey.derive(pathToUse).privKey;
     const address = childPk.toAddress();
 
     // Needed to calculate the recovery factor
-    const dummySig = BSM.sign(toArray(message), childPk, 'raw') as Signature;
-    const h = new BigNumber(magicHash(toArray(message, "utf8")));
+    const dummySig = BSM.sign(message, childPk, 'raw') as Signature;
+    const h = new BigNumber(magicHash(message));
     const r = dummySig.CalculateRecoveryFactor(
       childPk.toPublicKey(),
       h,
     );
-    const signature = (BSM.sign(toArray(msg), childPk, 'raw') as Signature).toCompact(
+    const signature = (BSM.sign(message, childPk, 'raw') as Signature).toCompact(
       r,
       true,
-      "base64",
+      "base64"
     ) as string;
 
     return { address, signature };
@@ -656,19 +652,20 @@ class MasterID {
     const derivedChild = HDPrivateKey.derive(path);
     const address = derivedChild.privKey.toPublicKey().toAddress();
 
-    const dummySig = BSM.sign(toArray(message), derivedChild.privKey, 'raw') as Signature;
+    const messageArray = toArray(message, "utf8");
+    const dummySig = BSM.sign(messageArray, derivedChild.privKey, 'raw') as Signature;
 
-    const h = new BigNumber(magicHash(toArray(message, "utf8")));
+    const h = new BigNumber(magicHash(messageArray));
     const r = dummySig.CalculateRecoveryFactor(
       derivedChild.privKey.toPublicKey(),
       h,
     );
 
-    const signature = (BSM.sign(
-      toArray(Buffer.from(message)),
-      derivedChild.privKey,
-      'raw',
-    ) as Signature).toCompact(r, true, "base64") as string;
+    const signature = (BSM.sign(messageArray, derivedChild.privKey, 'raw') as Signature).toCompact(
+      r,
+      true,
+      "base64"
+    ) as string;
 
     return { address, signature };
   }
@@ -677,47 +674,29 @@ class MasterID {
    * Sign an op_return hex array with AIP
    * @param opReturn {array}
    * @param signingPath {string}
-   * @param outputType {string}
-   * @return {[]}
+   * @return {number[]}
    */
   signOpReturnWithAIP(
-    opReturn: string[],
+    opReturn: number[][],
     signingPath = "",
-    outputType: BufferEncoding = "hex",
-  ): string[] {
+  ): number[][] {
+    // Store current path
+    const currentPath = this.#currentPath;
+    
+    // Set path for signing if provided
+    // if (signingPath) {
+    //   this.#currentPath = signingPath;
+    // }
+
+    // Sign the message
     const aipMessageBuffer = this.getAIPMessageBuffer(opReturn);
-    const { address, signature } = this.signMessage(
-      aipMessageBuffer,
-      signingPath,
-    );
+    const { address, signature } = this.signMessage(aipMessageBuffer, signingPath);
 
-    return opReturn.concat([
-      Buffer.from("|").toString(outputType),
-      Buffer.from(AIP_BITCOM_ADDRESS).toString(outputType),
-      Buffer.from("BITCOIN_ECDSA").toString(outputType),
-      Buffer.from(address).toString(outputType),
-      Buffer.from(signature, "base64").toString(outputType),
-    ]);
-  }
+    // Restore original path
+    // this.#currentPath = currentPath;
 
-  /**
-   * Construct an AIP buffer from the op return data
-   * @param opReturn
-   * @returns {Buffer}
-   */
-  getAIPMessageBuffer(opReturn: string[]): Buffer {
-    const buffers = [];
-    if (opReturn[0].replace("0x", "") !== "6a") {
-      // include OP_RETURN in constructing the signature buffer
-      buffers.push(Buffer.from("6a", "hex"));
-    }
-    for (const op of opReturn) {
-      buffers.push(Buffer.from(op.replace("0x", ""), "hex"));
-    }
-    // add a trailing "|" - this is the AIP way
-    buffers.push(Buffer.from("|"));
-
-    return Buffer.concat([...buffers] as unknown as Uint8Array[]);
+    // Format and return the result
+    return this.formatAIPOutput(opReturn, address, signature);
   }
 
   /**
@@ -750,27 +729,6 @@ class MasterID {
 
     return attestations;
   }
-
-  // /**
-  //  * Helper function to get attestation from a BAP API server
-  //  *
-  //  * @param apiUrl
-  //  * @param apiData
-  //  * @returns {Promise<any>}
-  //  */
-  // async getApiData(apiUrl: string, apiData: any): Promise<any> {
-  // 	const url = `${this.#BAP_SERVER}${apiUrl}`;
-  // 	const response = await fetch(url, {
-  // 		method: "post",
-  // 		headers: {
-  // 			"Content-type": "application/json; charset=utf-8",
-  // 			token: this.#BAP_TOKEN,
-  // 			format: "json",
-  // 		},
-  // 		body: JSON.stringify(apiData),
-  // 	});
-  // 	return response.json();
-  // }
 
   /**
    * Import an identity from a JSON object
@@ -825,8 +783,8 @@ class MasterID {
     // Assuming incrementPath updates the internal current path
     this.incrementPath();
     const derivedKey = this.#HDPrivateKey.derive(this.#currentPath).privKey;
-    return new MemberID(derivedKey, this.getAttributes());
+    return new MemberID(derivedKey);
   }
 }
-
 export { MasterID };
+

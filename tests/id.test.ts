@@ -2,12 +2,16 @@ import { describe, expect, beforeEach, test } from "bun:test";
 import { BAP } from "../src";
 import { MasterID } from "../src/MasterID";
 import { HDPrivateKey } from "./data/keys";
-import { HD, PrivateKey } from "@bsv/sdk";
+import { HD, PrivateKey, Utils } from "@bsv/sdk";
+
 import {
 	BAP_BITCOM_ADDRESS_HEX,
 	AIP_BITCOM_ADDRESS_HEX,
 	SIGNING_PATH_PREFIX,
+  AIP_BITCOM_ADDRESS,
 } from "../src/constants";
+
+const { toHex, toArray } = Utils;
 
 const identityAttributes = {
 	name: {
@@ -186,19 +190,19 @@ urn:bap:id:email:john.doe@example.com:2864fd138ab1e9ddaaea763c77a45898dac64a2622
 	test("getInitialIdTransaction", () => {
 		const bapId = bap.newId(undefined, identityAttributes);
 		const tx = bapId.getInitialIdTransaction();
-		expect(`0x${tx[0]}`).toBe(BAP_BITCOM_ADDRESS_HEX);
-		expect(tx[1]).toBe(Buffer.from("ID").toString("hex"));
-		expect(tx[2]).toBe(Buffer.from(bapId.getIdentityKey()).toString("hex"));
-		expect(tx[3]).toBe(
-			Buffer.from(bapId.getAddress(bapId.currentPath)).toString("hex"),
-		);
-		expect(tx[4]).toBe(Buffer.from("|").toString("hex"));
-		expect(`0x${tx[5]}`).toBe(AIP_BITCOM_ADDRESS_HEX);
-		expect(tx[6]).toBe(Buffer.from("BITCOIN_ECDSA").toString("hex"));
-		expect(tx[7]).toBe(
-			Buffer.from(bapId.getAddress(bapId.rootPath)).toString("hex"),
-		);
-		expect(typeof tx[8]).toBe("string");
+		expect(toHex(tx[0])).toBe(BAP_BITCOM_ADDRESS_HEX);
+		expect(tx[1]).toMatchObject(toArray("ID"));
+    
+		expect(tx[2]).toMatchObject(toArray(bapId.getIdentityKey()));
+
+		expect(tx[3]).toMatchObject(toArray(bapId.getAddress(bapId.currentPath)));
+			
+		expect(tx[4]).toMatchObject(toArray("|"));
+		expect(tx[5]).toMatchObject(toArray(AIP_BITCOM_ADDRESS));
+		expect(tx[6]).toMatchObject(toArray("BITCOIN_ECDSA"));
+		expect(tx[7]).toMatchObject(toArray(bapId.getAddress(bapId.rootPath)));
+		
+		expect(typeof tx[8]).toBe("object");
 	});
 
 	test("encryption public keys", () => {
