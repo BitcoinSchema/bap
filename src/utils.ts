@@ -3,46 +3,12 @@ import type { PathPrefix } from "./interface.js";
 
 export const Utils = {
   /**
-   * Helper function for encoding strings to hex
-   *
-   * @param string
-   * @returns {string}
-   */
-  hexEncode(string: string) {
-    return `0x${Buffer.from(string).toString('hex')}`;
-  },
-
-  /**
-   * Helper function for encoding strings to hex
-   *
-   * @param hexString string
-   * @param encoding BufferEncoding
-   * @returns {string}
-   */
-  hexDecode(hexString: string, encoding: BufferEncoding = 'utf8') {
-    return Buffer.from(hexString.replace('0x', ''), 'hex').toString(encoding);
-  },
-
-  /**
    * Helper function to generate a random nonce
    *
    * @returns {string}
    */
   getRandomString(length = 32) {
     return randomBytes(length).toString('hex');
-  },
-
-  /**
-   * Test whether the given string is hex
-   *
-   * @param value any
-   * @returns {boolean}
-   */
-  isHex(value: string): boolean {
-    if (typeof value !== 'string') {
-      return false;
-    }
-    return /^[0-9a-fA-F]+$/.test(value);
   },
 
   /**

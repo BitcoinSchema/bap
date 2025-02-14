@@ -1,4 +1,4 @@
-import { BSM, type Signature, BigNumber, PrivateKey, Utils, Hash } from "@bsv/sdk";
+import { BSM, type Signature, BigNumber, PrivateKey, Utils } from "@bsv/sdk";
 import { BaseClass } from "./BaseClass";
 import type { IdentityAttributes } from "./interface";
 
@@ -18,7 +18,6 @@ export class MemberID extends BaseClass {
   public idName: string;
   public description: string;
   public address: string;
-  public identityAttributes: IdentityAttributes;
 
   constructor(key: PrivateKey) {
     super();
@@ -72,7 +71,7 @@ export class MemberID extends BaseClass {
     this.identityAttributes = identity.identityAttributes || {};
   }
 
-  static fromImport(identity: MemberIdentity): MemberID {
+  static fromBackup(identity: MemberIdentity): MemberID {
     const member = new MemberID(PrivateKey.fromString(identity.derivedPrivateKey));
     member.import(identity);
     return member;
@@ -85,20 +84,7 @@ export class MemberID extends BaseClass {
       description: this.description,
       derivedPrivateKey: this.key.toString(),
       address: this.address,
-      identityAttributes: this.identityAttributes
+      identityAttributes: this.getAttributes()
     };
-  }
-
-  // Helper to parse identity attributes from a string of URNs
-  private parseStringUrns(urnIdentityAttributes: string): IdentityAttributes {
-    const attrs: IdentityAttributes = {};
-    const lines = urnIdentityAttributes.replace(/^[ \t]+/gm, "").trim().split("\n");
-    for (const line of lines) {
-      const parts = line.split(":");
-      if (parts.length >= 6 && parts[0] === "urn" && parts[1] === "bap" && parts[2] === "id") {
-        attrs[parts[3]] = { value: parts[4], nonce: parts[5] };
-      }
-    }
-    return attrs;
   }
 }
