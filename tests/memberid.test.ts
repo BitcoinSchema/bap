@@ -1,8 +1,12 @@
 import { describe, test, expect } from "bun:test";
 import { MemberID } from "../src/MemberID";
-import { PrivateKey } from "@bsv/sdk";
+import { PrivateKey, Utils } from "@bsv/sdk";
+import type { IdentityAttributes } from "../src/interface";
 
 const testWIF = "L15CzYWPiqY1R5fLPjRFB2PTGUqRP34EYCy72jusd47otmYx3G2z";
+const { toArray } = Utils;
+
+const emptyAttributes: IdentityAttributes = {};
 
 describe("MemberID Backup and Import", () => {
   test("MemberID export should include only allowed fields", () => {
@@ -39,7 +43,7 @@ describe("MemberID Backup and Import", () => {
     const identityAttributes = { name: { value: "Test User", nonce: "nonce" } };
     const member = new MemberID(privateKey, identityAttributes);
 
-    const message = "Hello, Member!";
+    const message = toArray("Hello, Member!", "utf8");
     const result = member.signMessage(message);
     
     // The returned address should match the MemberID's public key
@@ -82,5 +86,60 @@ describe("MemberID Backup and Import", () => {
     expect(PrivateKey.fromString(imported.derivedPrivateKey).toString()).toBe(PrivateKey.fromString(exported.derivedPrivateKey).toString());
     expect(imported.address).toBe(exported.address);
     expect(imported.identityAttributes).toStrictEqual(exported.identityAttributes);
+  });
+});
+
+describe("MemberID Encryption", () => {
+  test("member encryption/decryption", () => {
+    const privateKey = PrivateKey.fromWif(testWIF);
+    const member = new MemberID(privateKey, emptyAttributes);
+
+    // Test data
+    const testData = "This is a test message for member encryption";
+    
+    // Get encryption keys
+    const encryptionKey = member.getEncryptionKey();
+    expect(encryptionKey.privKey).toBeDefined();
+    expect(encryptionKey.pubKey).toBeDefined();
+    
+    // Test encryption
+    const ciphertext = member.encrypt(testData);
+    expect(typeof ciphertext).toBe("string");
+    expect(ciphertext).not.toBe(testData);
+    
+    // Test decryption
+    const decrypted = member.decrypt(ciphertext);
+    expect(decrypted).toBe(testData);
+
+    // Test encryption with counterparty
+    const counterpartyKey = PrivateKey.fromRandom().toPublicKey().toString();
+    const ciphertextWithCounterparty = member.encrypt(testData, counterpartyKey);
+    expect(typeof ciphertextWithCounterparty).toBe("string");
+    expect(ciphertextWithCounterparty).not.toBe(testData);
+    
+    // Test decryption with counterparty
+    const decryptedWithCounterparty = member.decrypt(ciphertextWithCounterparty, counterpartyKey);
+    expect(decryptedWithCounterparty).toBe(testData);
+  });
+
+  test("member encryption key derivation is deterministic", () => {
+    // Create two identical member IDs
+    const privateKey = PrivateKey.fromWif(testWIF);
+    const member1 = new MemberID(privateKey, emptyAttributes);
+    const member2 = new MemberID(privateKey, emptyAttributes);
+
+    // Get encryption keys
+    const key1 = member1.getEncryptionKey();
+    const key2 = member2.getEncryptionKey();
+
+    // Keys should be identical
+    expect(key1.privKey.toString()).toBe(key2.privKey.toString());
+    expect(key1.pubKey.toString()).toBe(key2.pubKey.toString());
+
+    // Test encryption/decryption between the two instances
+    const testData = "Testing deterministic encryption";
+    const encrypted1 = member1.encrypt(testData);
+    const decrypted2 = member2.decrypt(encrypted1);
+    expect(decrypted2).toBe(testData);
   });
 }); 
