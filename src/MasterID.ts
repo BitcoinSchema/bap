@@ -565,22 +565,8 @@ class MasterID extends BaseClass {
     opReturn: number[][],
     signingPath = "",
   ): number[][] {
-    // Store current path
-    const currentPath = this.#currentPath;
-    
-    // Set path for signing if provided
-    // if (signingPath) {
-    //   this.#currentPath = signingPath;
-    // }
-
-    // Sign the message
     const aipMessageBuffer = this.getAIPMessageBuffer(opReturn);
-    const { address, signature } = this.signMessage(aipMessageBuffer, signingPath);
-
-    // Restore original path
-    // this.#currentPath = currentPath;
-
-    // Format and return the result
+    const { address, signature } = this.signMessage(aipMessageBuffer.flat(), signingPath);
     return this.formatAIPOutput(opReturn, address, signature);
   }
 

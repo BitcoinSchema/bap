@@ -54,8 +54,8 @@ export class MemberID extends BaseClass {
     _signingPath?: string,
   ): number[][] {
     const aipMessageBuffer = this.getAIPMessageBuffer(opReturn);
-    const { address, signature } = this.signMessage(aipMessageBuffer);
-    return this.formatAIPOutput(opReturn, address, signature);
+    const { address, signature } = this.signMessage(aipMessageBuffer.flat());
+    return this.formatAIPOutput(aipMessageBuffer, address, signature);
   }
 
   // Return the member's public key

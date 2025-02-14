@@ -62,8 +62,8 @@ abstract class BaseClass {
     signingPath?: string,
   ): number[][] {
     const aipMessageBuffer = this.getAIPMessageBuffer(opReturn);
-    const { address, signature } = this.signMessage(aipMessageBuffer, signingPath);
-    return this.formatAIPOutput(opReturn, address, signature);
+    const { address, signature } = this.signMessage(aipMessageBuffer.flat(), signingPath);
+    return this.formatAIPOutput(aipMessageBuffer, address, signature);
   }
 
   /**
@@ -253,17 +253,35 @@ abstract class BaseClass {
    * @param opReturn
    * @returns {number[]} Array of numbers representing the buffer
    */
-  protected getAIPMessageBuffer(opReturn: number[][]): number[] {
-    const buffers: number[] = [];
-    if (opReturn[0][0] !== OP.OP_RETURN) {
+  protected getAIPMessageBuffer(opReturn: number[][], indicies?: number[]): number[][] {
+
+    // locate the position of OP_RETURN in the opReturn array
+    let opReturnIndex = opReturn.findIndex(op => op[0] === OP.OP_RETURN);
+    const buffers: number[][] = [];
+
       // include OP_RETURN in constructing the signature buffer
-      buffers.push(OP.OP_RETURN);
+    if (opReturnIndex === -1) {
+      buffers.push([OP.OP_RETURN]);
+      opReturnIndex = 0;
     }
-    for (const op of opReturn) {
-      buffers.push(...op);
+
+    // if indicies is specified, only include the specified indicies in the buffer
+    // relative to the position of OP_RETURN as "0"
+    if (indicies) {
+      for (const index of indicies) {
+        buffers.push(opReturn[opReturnIndex + index]);
+      }
+    } else {
+      for (const op of opReturn) {
+        buffers.push(op);
+      }
     }
-    // add a trailing "|" - this is the AIP way
-    return buffers.concat(toArray("|"));
+
+    if (opReturn.length > 0) {
+      // add a trailing "|" - this is the AIP way
+      buffers.push(toArray("|"));
+    }
+    return buffers;
   }
 
   /**
@@ -277,7 +295,7 @@ abstract class BaseClass {
     opReturnBuffers: number[][],
     address: string,
     signature: string,
-  ): number[][] {    
+  ): number[][] {
     // Add AIP protocol elements
     const aipElements = [
       toArray("|"),
