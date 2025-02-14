@@ -172,7 +172,10 @@ abstract class BaseClass {
     return identityAttributes || {};
   }
 
-  private updateExistingAttribute(
+  /**
+   * Helper method to update an existing attribute
+   */
+  protected updateExistingAttribute(
     attributeName: string,
     attributeValue: string | Record<string, string>
   ): void {
@@ -187,7 +190,10 @@ abstract class BaseClass {
     }
   }
 
-  private createNewAttribute(
+  /**
+   * Helper method to create a new attribute
+   */
+  protected createNewAttribute(
     attributeName: string,
     attributeValue: string | Record<string, string>
   ): void {
