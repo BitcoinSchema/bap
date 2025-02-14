@@ -13,6 +13,7 @@ import {
 import { MasterID } from "./MasterID";
 import type { Attestation, Identity, IdentityAttributes, OldIdentity, PathPrefix } from "./interface";
 import { Utils } from "./utils";
+import { MemberID } from "./MemberID";
 const { toArray, toUTF8, toBase64 } = BSVUtils;
 const { electrumEncrypt, electrumDecrypt } = ECIES;
 
@@ -690,6 +691,6 @@ export class BAP {
 
 };
 
-export { MasterID };
+export { MasterID, MemberID };
 export type { Attestation, Identity, IdentityAttributes, PathPrefix };
 
