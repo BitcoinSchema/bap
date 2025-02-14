@@ -657,7 +657,7 @@ class MasterID extends BaseClass {
     return {
       name: this.idName,
       description: this.description,
-      derivedPrivateKey: derivedKey.toString(),
+      derivedPrivateKey: derivedKey.toWif(),
       address: derivedKey.toPublicKey().toAddress(),
       identityAttributes: this.getAttributes(),
     };

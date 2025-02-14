@@ -67,13 +67,13 @@ export class MemberID extends BaseClass {
   public import(identity: MemberIdentity): void {
     this.idName = identity.name;
     this.description = identity.description;
-    this.key = PrivateKey.fromString(identity.derivedPrivateKey);
+    this.key = PrivateKey.fromWif(identity.derivedPrivateKey);
     this.address = this.key.toAddress();
     this.identityAttributes = identity.identityAttributes || {};
   }
 
   static fromBackup(identity: MemberIdentity): MemberID {
-    const member = new MemberID(PrivateKey.fromString(identity.derivedPrivateKey));
+    const member = new MemberID(PrivateKey.fromWif(identity.derivedPrivateKey));
     member.import(identity);
     return member;
   }
@@ -83,7 +83,7 @@ export class MemberID extends BaseClass {
     return {
       name: this.idName,
       description: this.description,
-      derivedPrivateKey: this.key.toString(),
+      derivedPrivateKey: this.key.toWif(),
       address: this.address,
       identityAttributes: this.getAttributes()
     };

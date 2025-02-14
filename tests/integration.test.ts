@@ -1,8 +1,10 @@
 import { describe, test, expect } from "bun:test";
 import { MasterID } from "../src/MasterID";
 import { MemberID } from "../src/MemberID";
-import { PrivateKey } from "@bsv/sdk";
+import { PrivateKey, Utils } from "@bsv/sdk";
 import { BAP } from "../src";
+
+const { toArray } = Utils;
 
 // Integration test: secure member key flow via master key derivation
 
@@ -21,15 +23,13 @@ describe("Integration Test: MasterID and MemberID secure derivation flow", () =>
     const backup = member2.exportMemberBackup();
     
     // Simulate creating a new MemberID from the backup (acting as MemberID.fromBackup())
-    const importedMember = new MemberID(PrivateKey.fromString(backup.derivedPrivateKey), backup.identityAttributes);
-    importedMember.idName = backup.name;
-    importedMember.description = backup.description;
+    const importedMember = MemberID.fromBackup(backup);
 
     // Verify that the imported member's address matches the backup's address
     expect(importedMember.address).toBe(backup.address);
 
     // Verify that the imported member can sign a message
-    const message = "Integration test message";
+    const message = toArray("Integration test message", "utf8");
     const signed = importedMember.signMessage(message);
     expect(typeof signed.signature).toBe("string");
     expect(signed.signature.length).toBeGreaterThan(0);
