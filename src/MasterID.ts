@@ -1,4 +1,5 @@
-import { BSM, Utils as BSVUtils, BigNumber, ECIES, type HD, Hash, PublicKey, type Signature } from "@bsv/sdk";
+import { BSM, Utils as BSVUtils, ECIES, Hash, PublicKey, type PrivateKey, BigNumber } from "@bsv/sdk";
+import type { HD, Signature } from "@bsv/sdk";
 
 import { type APIFetcher, apiFetcher } from "./api";
 import type { GetAttestationResponse, GetSigningKeysResponse } from "./apiTypes";
@@ -346,13 +347,23 @@ class MasterID extends BaseClass {
   }
 
   /**
+   * Get the encryption key pair for this identity
+   */
+  getEncryptionKey(): { privKey: PrivateKey, pubKey: PublicKey } {
+    const HDPrivateKey = this.#HDPrivateKey.derive(this.#rootPath);
+    const encryptionKey = HDPrivateKey.derive(ENCRYPTION_PATH).privKey;
+    return {
+      privKey: encryptionKey,
+      pubKey: encryptionKey.toPublicKey()
+    };
+  }
+
+  /**
    * Get the public key for encrypting data for this identity
    */
   getEncryptionPublicKey(): string {
-    const HDPrivateKey = this.#HDPrivateKey.derive(this.#rootPath);
-    const encryptionKey = HDPrivateKey.derive(ENCRYPTION_PATH).privKey;
-    // @ts-ignore
-    return encryptionKey.toPublicKey().toString();
+    const { pubKey } = this.getEncryptionKey();
+    return pubKey.toString();
   }
 
   /**
@@ -360,8 +371,7 @@ class MasterID extends BaseClass {
    */
   getEncryptionPublicKeyWithSeed(seed: string): string {
     const encryptionKey = this.getEncryptionPrivateKeyWithSeed(seed);
-    // @ts-ignore
-    return encryptionKey.toPublicKey().toString("hex");
+    return encryptionKey.toPublicKey().toString();
   }
 
   /**

@@ -1,8 +1,10 @@
-import { OP, Utils as BSVUtils } from "@bsv/sdk";
+import { ECIES, Utils as BSVUtils, OP, PublicKey } from "@bsv/sdk";
+import type { PrivateKey } from "@bsv/sdk";
 import { AIP_BITCOM_ADDRESS } from "./constants";
 import type { IdentityAttribute, IdentityAttributes } from "./interface";
 import { Utils } from "./utils";
-const { toArray } = BSVUtils;
+const { toArray, toUTF8, toBase64 } = BSVUtils;
+const { electrumDecrypt, electrumEncrypt } = ECIES;
 
 abstract class BaseClass {
   protected identityAttributes: IdentityAttributes = {};
@@ -16,16 +18,53 @@ abstract class BaseClass {
   abstract signMessage(message: number[], signingPath?: string): { address: string; signature: string };
 
   /**
+   * Abstract method that must be implemented by derived classes to get encryption key
+   */
+  abstract getEncryptionKey(): { privKey: PrivateKey, pubKey: PublicKey };
+
+  /**
+   * Encrypt the given string data with the identity encryption key
+   * @param stringData
+   * @param counterPartyPublicKey Optional public key of the counterparty
+   * @return string Base64
+   */
+  encrypt(stringData: string, counterPartyPublicKey?: string): string {
+    const { privKey, pubKey } = this.getEncryptionKey();
+    const targetPubKey = counterPartyPublicKey
+      ? PublicKey.fromString(counterPartyPublicKey)
+      : pubKey;
+    return toBase64(electrumEncrypt(toArray(stringData), targetPubKey, privKey));
+  }
+
+  /**
+   * Decrypt the given ciphertext with the identity encryption key
+   * @param ciphertext
+   * @param counterPartyPublicKey Optional public key of the counterparty
+   */
+  decrypt(ciphertext: string, counterPartyPublicKey?: string): string {
+    const { privKey } = this.getEncryptionKey();
+    let pubKey = undefined;
+    if (counterPartyPublicKey) {
+      pubKey = PublicKey.fromString(counterPartyPublicKey);
+    }
+    return toUTF8(electrumDecrypt(toArray(ciphertext, "base64"), privKey, pubKey));
+  }
+
+  /**
    * Sign an op_return hex array with AIP
    * Each implementation must handle its own signing path logic
    * @param opReturn {array}
    * @param signingPath {string}
    * @return {number[]}
    */
-  abstract signOpReturnWithAIP(
+  signOpReturnWithAIP(
     opReturn: number[][],
     signingPath?: string,
-  ): number[][];
+  ): number[][] {
+    const aipMessageBuffer = this.getAIPMessageBuffer(opReturn);
+    const { address, signature } = this.signMessage(aipMessageBuffer, signingPath);
+    return this.formatAIPOutput(opReturn, address, signature);
+  }
 
   /**
    * Returns all the attributes in the identity
@@ -214,7 +253,7 @@ abstract class BaseClass {
    * @param opReturn
    * @returns {number[]} Array of numbers representing the buffer
    */
-  getAIPMessageBuffer(opReturn: number[][]): number[] {
+  protected getAIPMessageBuffer(opReturn: number[][]): number[] {
     const buffers: number[] = [];
     if (opReturn[0][0] !== OP.OP_RETURN) {
       // include OP_RETURN in constructing the signature buffer

@@ -1,8 +1,9 @@
-import { BSM, type Signature, BigNumber, PrivateKey, Utils } from "@bsv/sdk";
+import { BSM, Utils as BSVUtils, type PublicKey, PrivateKey, BigNumber, Hash } from "@bsv/sdk";
+import type { Signature } from "@bsv/sdk";
 import { BaseClass } from "./BaseClass";
 import type { IdentityAttributes } from "./interface";
-
-const { toHex, toBase58, toArray } = Utils;
+import { ENCRYPTION_PATH } from "./constants";
+const { toHex, toBase58, toArray } = BSVUtils;
 const { magicHash } = BSM;
 
 export interface MemberIdentity {
@@ -19,13 +20,13 @@ export class MemberID extends BaseClass {
   public description: string;
   public address: string;
 
-  constructor(key: PrivateKey) {
+  constructor(key: PrivateKey, identityAttributes: IdentityAttributes = {}) {
     super();
     this.key = key;
     this.address = key.toAddress();
     this.idName = "Member ID 1";
     this.description = "";
-    this.identityAttributes = {};
+    this.identityAttributes = this.parseAttributes(identityAttributes);
   }
 
   // Implement the abstract signMessage method from BaseClass
@@ -86,5 +87,27 @@ export class MemberID extends BaseClass {
       address: this.address,
       identityAttributes: this.getAttributes()
     };
+  }
+
+  /**
+   * Get the encryption key pair for this identity
+   * We use the same key for both signing and encryption for simplicity
+   */
+  getEncryptionKey(): { privKey: PrivateKey, pubKey: PublicKey } {
+    // Derive the encryption key from the private key using the ENCRYPTION_PATH
+    // Since member keys are not HD keys, we use the path as the invoice number, 
+    // and use our own public key as the  other party
+    return {
+      privKey: this.key.deriveChild(this.key.toPublicKey(), ENCRYPTION_PATH),
+      pubKey: this.key.deriveChild(this.key.toPublicKey(), ENCRYPTION_PATH).toPublicKey()
+    };
+  }
+
+  /**
+   * Get the public key for encrypting data for this identity
+   */
+  getEncryptionPublicKey(): string {
+    const { pubKey } = this.getEncryptionKey();
+    return pubKey.toString();
   }
 }
