@@ -84,8 +84,10 @@ describe("MemberID Backup and Import", () => {
     expect(imported.name).toBe(exported.name);
     expect(imported.description).toBe(exported.description);
     expect(PrivateKey.fromString(imported.derivedPrivateKey).toString()).toBe(PrivateKey.fromString(exported.derivedPrivateKey).toString());
-    expect(imported.address).toBe(exported.address);
-    expect(imported.identityAttributes).toStrictEqual(exported.identityAttributes);
+    expect(imported.address).toBe(exported.address)
+    expect(imported.identityAttributes).not.toBeUndefined();
+    // biome-ignore lint/style/noNonNullAssertion: testing for undefined above
+    expect(imported.identityAttributes).toStrictEqual(exported.identityAttributes!);
   });
 });
 

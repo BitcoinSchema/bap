@@ -96,7 +96,7 @@ export class MemberID extends BaseClass {
   getEncryptionKey(): { privKey: PrivateKey, pubKey: PublicKey } {
     // Derive the encryption key from the private key using the ENCRYPTION_PATH
     // Since member keys are not HD keys, we use the path as the invoice number, 
-    // and use our own public key as the  other party
+    // and use our own public key as the other party's public key
     return {
       privKey: this.key.deriveChild(this.key.toPublicKey(), ENCRYPTION_PATH),
       pubKey: this.key.deriveChild(this.key.toPublicKey(), ENCRYPTION_PATH).toPublicKey()

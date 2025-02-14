@@ -6,7 +6,6 @@ import { HD, PrivateKey, Utils } from "@bsv/sdk";
 
 import {
 	BAP_BITCOM_ADDRESS_HEX,
-	AIP_BITCOM_ADDRESS_HEX,
 	SIGNING_PATH_PREFIX,
   AIP_BITCOM_ADDRESS,
 } from "../src/constants";

@@ -359,6 +359,17 @@ class MasterID extends BaseClass {
   }
 
   /**
+   * Get the encryption key using type 42 (different key / incompatible with above)
+   */
+  getEncryptionKeyType42(): { privKey: PrivateKey, pubKey: PublicKey } {
+    const HDPrivateKey = this.#HDPrivateKey.derive(this.#rootPath);
+    const encryptionKey = HDPrivateKey.privKey.deriveChild(HDPrivateKey.toPublic().pubKey, ENCRYPTION_PATH);
+    return {
+      privKey: encryptionKey,
+      pubKey: encryptionKey.toPublicKey()
+    };
+  }
+  /**
    * Get the public key for encrypting data for this identity
    */
   getEncryptionPublicKey(): string {
