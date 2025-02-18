@@ -6,6 +6,8 @@ import {
 import { BAP } from '../src';
 
 import testVectors from './data/test-vectors.json';
+import { Utils } from "@bsv/sdk"
+const { toArray } = Utils;
 
 describe('test-vectors', () => {
   it('regression', () => {
@@ -16,13 +18,13 @@ describe('test-vectors', () => {
       expect(id.getIdentityKey()).toBe(v.idKey);
       expect(id.rootPath).toBe(v.rootPath);
       const tx = id.getInitialIdTransaction();
-      expect(typeof tx[8]).toBe('string')
+      expect(typeof tx[8]).toBe('object')
       expect(typeof v.tx[8]).toBe('string')
       // biome-ignore lint/performance/noDelete: <explanation>
       delete tx[8]; // remove the signature, will be different
       // biome-ignore lint/performance/noDelete: <explanation>
       delete v.tx[8]; // remove the signature, will be different
-      expect(tx).toStrictEqual(v.tx);
+      expect(tx).toStrictEqual(v.tx.map(t => toArray(t, "hex")));
     }
   });
 });

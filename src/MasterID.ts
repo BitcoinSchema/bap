@@ -1,4 +1,5 @@
-import { BSM, Utils as BSVUtils, BigNumber, ECIES, type HD, Hash, PublicKey, type Signature } from "@bsv/sdk";
+import { BSM, Utils as BSVUtils, ECIES, Hash, PublicKey, type PrivateKey, BigNumber } from "@bsv/sdk";
+import type { HD, Signature } from "@bsv/sdk";
 
 import { type APIFetcher, apiFetcher } from "./api";
 import type { GetAttestationResponse, GetSigningKeysResponse } from "./apiTypes";
@@ -18,6 +19,7 @@ import type {
 } from "./interface";
 import { Utils } from "./utils";
 import { MemberID, type MemberIdentity } from './MemberID';
+import { BaseClass } from "./BaseClass";
 const { toArray, toHex, toBase58, toUTF8, toBase64 } = BSVUtils;
 const { electrumDecrypt, electrumEncrypt } = ECIES;
 const { magicHash } = BSM;
@@ -28,7 +30,7 @@ const { magicHash } = BSM;
  *
  * @type {MasterID}
  */
-class MasterID {
+class MasterID extends BaseClass {
   #HDPrivateKey: HD;
   #BAP_SERVER: string = BAP_SERVER;
   #BAP_TOKEN = "";
@@ -51,7 +53,8 @@ class MasterID {
     identityAttributes: IdentityAttributes = {},
     idSeed = "",
   ) {
-    this.#idSeed = idSeed;
+    super();
+    
     if (idSeed) {
       // create a new HDPrivateKey based on the seed
       const seedHex = toHex(Hash.sha256(idSeed, "utf8"));
@@ -61,6 +64,7 @@ class MasterID {
       this.#HDPrivateKey = HDPrivateKey;
     }
 
+    this.#idSeed = idSeed;
     this.idName = "ID 1";
     this.description = "";
 
@@ -170,142 +174,6 @@ class MasterID {
    */
   getIdentityKey(): string {
     return this.identityKey;
-  }
-
-  /**
-   * Returns all the attributes in the identity
-   *
-   * @returns {*}
-   */
-  getAttributes(): IdentityAttributes {
-    return this.identityAttributes;
-  }
-
-  /**
-   * Get the value of the given attribute
-   *
-   * @param attributeName
-   * @returns {{}|null}
-   */
-  getAttribute(attributeName: string): IdentityAttribute | null {
-    if (this.identityAttributes[attributeName]) {
-      return this.identityAttributes[attributeName];
-    }
-
-    return null;
-  }
-
-  /**
-   * Set the value of the given attribute
-   *
-   * If an empty value ('' || null || false) is given, the attribute is removed from the ID
-   *
-   * @param attributeName string
-   * @param attributeValue any
-   * @returns {{}|null}
-   */
-  setAttribute(attributeName: string, attributeValue: string | Record<string, string>): void {
-    if (!attributeValue) {
-      return;
-    }
-
-    if (this.identityAttributes[attributeName]) {
-      this.updateExistingAttribute(attributeName, attributeValue);
-    } else {
-      this.createNewAttribute(attributeName, attributeValue);
-    }
-  }
-
-  private updateExistingAttribute(
-    attributeName: string,
-    attributeValue: string | Record<string, string>
-  ): void {
-    if (typeof attributeValue === 'string') {
-      this.identityAttributes[attributeName].value = attributeValue;
-      return;
-    }
-
-    this.identityAttributes[attributeName].value = attributeValue.value || '';
-    if (attributeValue.nonce) {
-      this.identityAttributes[attributeName].nonce = attributeValue.nonce;
-    }
-  }
-
-  private createNewAttribute(
-    attributeName: string,
-    attributeValue: string | Record<string, string>
-  ): void {
-    if (typeof attributeValue === 'string') {
-      this.addAttribute(attributeName, attributeValue);
-      return;
-    }
-
-    this.addAttribute(
-      attributeName,
-      attributeValue.value || '',
-      attributeValue.nonce
-    );
-  }
-
-  /**
-   * Unset the given attribute from the ID
-   *
-   * @param attributeName
-   * @returns {{}|null}
-   */
-  unsetAttribute(attributeName: string): void {
-    delete this.identityAttributes[attributeName];
-  }
-
-  /**
-   * Get all attribute urn's for this id
-   *
-   * @returns {string}
-   */
-  getAttributeUrns(): string {
-    let urns = "";
-    for (const key in this.identityAttributes) {
-      const urn = this.getAttributeUrn(key);
-      if (urn) {
-        urns += `${urn}\n`;
-      }
-    }
-
-    return urns;
-  }
-
-  /**
-   * Create an return the attribute urn for the given attribute
-   *
-   * @param attributeName
-   * @returns {string|null}
-   */
-  getAttributeUrn(attributeName: string): string | null {
-    const attribute = this.identityAttributes[attributeName];
-    if (attribute) {
-      return `urn:bap:id:${attributeName}:${attribute.value}:${attribute.nonce}`;
-    }
-
-    return null;
-  }
-
-  /**
-   * Add an attribute to this identity
-   *
-   * @param attributeName
-   * @param value
-   * @param nonce
-   */
-  addAttribute(attributeName: string, value: string, nonce = ""): void {
-    let nonceToUse = nonce;
-    if (!nonce) {
-      nonceToUse = Utils.getRandomString();
-    }
-
-    this.identityAttributes[attributeName] = {
-      value,
-      nonce: nonceToUse,
-    };
   }
 
   /**
@@ -446,10 +314,10 @@ class MasterID {
     }
 
     const opReturn = [
-      Buffer.from(BAP_BITCOM_ADDRESS).toString("hex"),
-      Buffer.from("ID").toString("hex"),
-      Buffer.from(this.identityKey).toString("hex"),
-      Buffer.from(this.getCurrentAddress()).toString("hex"),
+      toArray(BAP_BITCOM_ADDRESS),
+      toArray("ID"),
+      toArray(this.identityKey),
+      toArray(this.getCurrentAddress()),
     ];
 
     return this.signOpReturnWithAIP(
@@ -479,13 +347,34 @@ class MasterID {
   }
 
   /**
+   * Get the encryption key pair for this identity
+   */
+  getEncryptionKey(): { privKey: PrivateKey, pubKey: PublicKey } {
+    const HDPrivateKey = this.#HDPrivateKey.derive(this.#rootPath);
+    const encryptionKey = HDPrivateKey.derive(ENCRYPTION_PATH).privKey;
+    return {
+      privKey: encryptionKey,
+      pubKey: encryptionKey.toPublicKey()
+    };
+  }
+
+  /**
+   * Get the encryption key using type 42 (different key / incompatible with above)
+   */
+  getEncryptionKeyType42(): { privKey: PrivateKey, pubKey: PublicKey } {
+    const HDPrivateKey = this.#HDPrivateKey.derive(this.#rootPath);
+    const encryptionKey = HDPrivateKey.privKey.deriveChild(HDPrivateKey.toPublic().pubKey, ENCRYPTION_PATH);
+    return {
+      privKey: encryptionKey,
+      pubKey: encryptionKey.toPublicKey()
+    };
+  }
+  /**
    * Get the public key for encrypting data for this identity
    */
   getEncryptionPublicKey(): string {
-    const HDPrivateKey = this.#HDPrivateKey.derive(this.#rootPath);
-    const encryptionKey = HDPrivateKey.derive(ENCRYPTION_PATH).privKey;
-    // @ts-ignore
-    return encryptionKey.toPublicKey().toString();
+    const { pubKey } = this.getEncryptionKey();
+    return pubKey.toString();
   }
 
   /**
@@ -493,8 +382,7 @@ class MasterID {
    */
   getEncryptionPublicKeyWithSeed(seed: string): string {
     const encryptionKey = this.getEncryptionPrivateKeyWithSeed(seed);
-    // @ts-ignore
-    return encryptionKey.toPublicKey().toString("hex");
+    return encryptionKey.toPublicKey().toString();
   }
 
   /**
@@ -605,29 +493,22 @@ class MasterID {
    * @param signingPath
    * @returns {{address: string, signature: string}}
    */
-  signMessage(message: string | Buffer, signingPath = ""): { address: string, signature: string } {
-    let msg: Buffer;
-    if (!(message instanceof Buffer)) {
-      msg = Buffer.from(message);
-    } else {
-      msg = message;
-    }
-
+  signMessage(message: number[], signingPath?: string): { address: string; signature: string } {
     const pathToUse = signingPath || this.#currentPath;
     const childPk = this.#HDPrivateKey.derive(pathToUse).privKey;
     const address = childPk.toAddress();
 
     // Needed to calculate the recovery factor
-    const dummySig = BSM.sign(toArray(message), childPk, 'raw') as Signature;
-    const h = new BigNumber(magicHash(toArray(message, "utf8")));
+    const dummySig = BSM.sign(message, childPk, 'raw') as Signature;
+    const h = new BigNumber(magicHash(message));
     const r = dummySig.CalculateRecoveryFactor(
       childPk.toPublicKey(),
       h,
     );
-    const signature = (BSM.sign(toArray(msg), childPk, 'raw') as Signature).toCompact(
+    const signature = (BSM.sign(message, childPk, 'raw') as Signature).toCompact(
       r,
       true,
-      "base64",
+      "base64"
     ) as string;
 
     return { address, signature };
@@ -656,19 +537,20 @@ class MasterID {
     const derivedChild = HDPrivateKey.derive(path);
     const address = derivedChild.privKey.toPublicKey().toAddress();
 
-    const dummySig = BSM.sign(toArray(message), derivedChild.privKey, 'raw') as Signature;
+    const messageArray = toArray(message, "utf8");
+    const dummySig = BSM.sign(messageArray, derivedChild.privKey, 'raw') as Signature;
 
-    const h = new BigNumber(magicHash(toArray(message, "utf8")));
+    const h = new BigNumber(magicHash(messageArray));
     const r = dummySig.CalculateRecoveryFactor(
       derivedChild.privKey.toPublicKey(),
       h,
     );
 
-    const signature = (BSM.sign(
-      toArray(Buffer.from(message)),
-      derivedChild.privKey,
-      'raw',
-    ) as Signature).toCompact(r, true, "base64") as string;
+    const signature = (BSM.sign(messageArray, derivedChild.privKey, 'raw') as Signature).toCompact(
+      r,
+      true,
+      "base64"
+    ) as string;
 
     return { address, signature };
   }
@@ -677,47 +559,15 @@ class MasterID {
    * Sign an op_return hex array with AIP
    * @param opReturn {array}
    * @param signingPath {string}
-   * @param outputType {string}
-   * @return {[]}
+   * @return {number[]}
    */
   signOpReturnWithAIP(
-    opReturn: string[],
+    opReturn: number[][],
     signingPath = "",
-    outputType: BufferEncoding = "hex",
-  ): string[] {
+  ): number[][] {
     const aipMessageBuffer = this.getAIPMessageBuffer(opReturn);
-    const { address, signature } = this.signMessage(
-      aipMessageBuffer,
-      signingPath,
-    );
-
-    return opReturn.concat([
-      Buffer.from("|").toString(outputType),
-      Buffer.from(AIP_BITCOM_ADDRESS).toString(outputType),
-      Buffer.from("BITCOIN_ECDSA").toString(outputType),
-      Buffer.from(address).toString(outputType),
-      Buffer.from(signature, "base64").toString(outputType),
-    ]);
-  }
-
-  /**
-   * Construct an AIP buffer from the op return data
-   * @param opReturn
-   * @returns {Buffer}
-   */
-  getAIPMessageBuffer(opReturn: string[]): Buffer {
-    const buffers = [];
-    if (opReturn[0].replace("0x", "") !== "6a") {
-      // include OP_RETURN in constructing the signature buffer
-      buffers.push(Buffer.from("6a", "hex"));
-    }
-    for (const op of opReturn) {
-      buffers.push(Buffer.from(op.replace("0x", ""), "hex"));
-    }
-    // add a trailing "|" - this is the AIP way
-    buffers.push(Buffer.from("|"));
-
-    return Buffer.concat([...buffers] as unknown as Uint8Array[]);
+    const { address, signature } = this.signMessage(aipMessageBuffer.flat(), signingPath);
+    return this.formatAIPOutput(opReturn, address, signature);
   }
 
   /**
@@ -750,27 +600,6 @@ class MasterID {
 
     return attestations;
   }
-
-  // /**
-  //  * Helper function to get attestation from a BAP API server
-  //  *
-  //  * @param apiUrl
-  //  * @param apiData
-  //  * @returns {Promise<any>}
-  //  */
-  // async getApiData(apiUrl: string, apiData: any): Promise<any> {
-  // 	const url = `${this.#BAP_SERVER}${apiUrl}`;
-  // 	const response = await fetch(url, {
-  // 		method: "post",
-  // 		headers: {
-  // 			"Content-type": "application/json; charset=utf-8",
-  // 			token: this.#BAP_TOKEN,
-  // 			format: "json",
-  // 		},
-  // 		body: JSON.stringify(apiData),
-  // 	});
-  // 	return response.json();
-  // }
 
   /**
    * Import an identity from a JSON object
@@ -814,7 +643,7 @@ class MasterID {
     return {
       name: this.idName,
       description: this.description,
-      derivedPrivateKey: derivedKey.toString(),
+      derivedPrivateKey: derivedKey.toWif(),
       address: derivedKey.toPublicKey().toAddress(),
       identityAttributes: this.getAttributes(),
     };
@@ -825,8 +654,8 @@ class MasterID {
     // Assuming incrementPath updates the internal current path
     this.incrementPath();
     const derivedKey = this.#HDPrivateKey.derive(this.#currentPath).privKey;
-    return new MemberID(derivedKey, this.getAttributes());
+    return new MemberID(derivedKey);
   }
 }
-
 export { MasterID };
+

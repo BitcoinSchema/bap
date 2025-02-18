@@ -9,7 +9,7 @@ import fullId from "./data/ids.json";
 import { HDPrivateKey, HDPublicKey } from "./data/keys";
 import oldFullId from "./data/old-ids.json";
 
-const { toArray } = Utils;
+const { toArray, toHex } = Utils;
 
 const testBAPInstance = (bap: BAP) => {
   expect(bap).toMatchObject({});
@@ -302,6 +302,8 @@ describe("BAP class", () => {
     );
     expect(transaction.length).toBe(15);
     const verify = bap.verifyAttestationWithAIP(transaction);
+    console.log({verify})
+
     expect(verify.verified).toBe(true);
   });
 
@@ -345,8 +347,7 @@ describe("BAP class", () => {
       const message = 'test message';
 
       // Create signature
-      const messageBuffer = Buffer.from(message);
-      const msg = toArray(messageBuffer.toString('hex'), 'hex');
+      const msg = toArray(message);
       const dummySig = BSM.sign(msg, privateKey, 'raw') as Signature;
       const h = new BigNumber(BSM.magicHash(msg));
       const r = dummySig.CalculateRecoveryFactor(privateKey.toPublicKey(), h);
@@ -355,7 +356,7 @@ describe("BAP class", () => {
       const bap = new BAP(HDPrivateKey);
 
       // Test local verification first
-      const localVerify = bap.verifySignature(message, address.toString(), signature);
+      const localVerify = bap.verifySignature(message, address, signature);
       console.log('Local verification result:', localVerify);
       expect(localVerify).toBe(true);
 
