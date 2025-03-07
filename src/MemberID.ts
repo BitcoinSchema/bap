@@ -1,24 +1,17 @@
 import { BSM, Utils as BSVUtils, type PublicKey, PrivateKey, BigNumber, Hash } from "@bsv/sdk";
 import type { Signature } from "@bsv/sdk";
 import { BaseClass } from "./BaseClass";
-import type { IdentityAttributes } from "./interface";
+import type { IdentityAttributes, MemberIdentity } from "./interface";
 import { ENCRYPTION_PATH } from "./constants";
 const { toHex, toBase58, toArray } = BSVUtils;
 const { magicHash } = BSM;
-
-export interface MemberIdentity {
-  name: string;
-  description: string;
-  derivedPrivateKey: string;
-  address: string;
-  identityAttributes?: IdentityAttributes;
-}
 
 export class MemberID extends BaseClass {
   private key: PrivateKey;
   public idName: string;
   public description: string;
   public address: string;
+  public identityKey: string
 
   constructor(key: PrivateKey, identityAttributes: IdentityAttributes = {}) {
     super();
@@ -26,13 +19,14 @@ export class MemberID extends BaseClass {
     this.address = key.toAddress();
     this.idName = "Member ID 1";
     this.description = "";
+    this.identityKey = "";
     this.identityAttributes = this.parseAttributes(identityAttributes);
   }
 
   // Implement the abstract signMessage method from BaseClass
   public signMessage(message: number[], _signingPath?: string): { address: string; signature: string } {
     const childPk = this.key;
-    const address = childPk.toPublicKey().toString();
+    const address = childPk.toAddress();
     
     // Sign using the raw message buffer directly
     const dummySig = BSM.sign(message, childPk, 'raw') as Signature;
@@ -70,11 +64,20 @@ export class MemberID extends BaseClass {
     this.key = PrivateKey.fromWif(identity.derivedPrivateKey);
     this.address = this.key.toAddress();
     this.identityAttributes = identity.identityAttributes || {};
+    this.identityKey = identity.identityKey;
   }
 
-  static fromBackup(identity: MemberIdentity): MemberID {
+  static fromMemberIdentity(identity: MemberIdentity): MemberID {
     const member = new MemberID(PrivateKey.fromWif(identity.derivedPrivateKey));
     member.import(identity);
+    return member;
+  }
+
+  static fromBackup(singleBackup: {wif:string, id: string}): MemberID {
+    // decrypt the id and set the details
+    const member = new MemberID(PrivateKey.fromWif(singleBackup.wif));
+    const id = JSON.parse(member.decrypt(singleBackup.id));
+    member.import(id);
     return member;
   }
 
@@ -85,7 +88,8 @@ export class MemberID extends BaseClass {
       description: this.description,
       derivedPrivateKey: this.key.toWif(),
       address: this.address,
-      identityAttributes: this.getAttributes()
+      identityAttributes: this.getAttributes(),
+      identityKey: this.identityKey,
     };
   }
 

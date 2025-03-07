@@ -1,6 +1,6 @@
 import { describe, test, expect } from "bun:test";
 import { MemberID } from "../src/MemberID";
-import { PrivateKey, Utils } from "@bsv/sdk";
+import { PrivateKey, PublicKey, Utils } from "@bsv/sdk";
 import type { IdentityAttributes } from "../src/interface";
 
 const testWIF = "L15CzYWPiqY1R5fLPjRFB2PTGUqRP34EYCy72jusd47otmYx3G2z";
@@ -47,7 +47,8 @@ describe("MemberID Backup and Import", () => {
     const result = member.signMessage(message);
     
     // The returned address should match the MemberID's public key
-    expect(result.address).toBe(member.getPublicKey());
+    const addressFromPubKey = PublicKey.fromString(member.getPublicKey()).toAddress();
+    expect(result.address).toBe(addressFromPubKey);
     expect(typeof result.signature).toBe("string");
     expect(result.signature.length).toBeGreaterThan(0);
   });

@@ -16,9 +16,10 @@ import type {
   IdentityAttribute,
   IdentityAttributes,
   OldIdentity,
+  MemberIdentity,
 } from "./interface";
 import { Utils } from "./utils";
-import { MemberID, type MemberIdentity } from './MemberID';
+import { MemberID } from './MemberID';
 import { BaseClass } from "./BaseClass";
 const { toArray, toHex, toBase58, toUTF8, toBase64 } = BSVUtils;
 const { electrumDecrypt, electrumEncrypt } = ECIES;
@@ -646,6 +647,7 @@ class MasterID extends BaseClass {
       derivedPrivateKey: derivedKey.toWif(),
       address: derivedKey.toPublicKey().toAddress(),
       identityAttributes: this.getAttributes(),
+      identityKey: this.identityKey,
     };
   }
 

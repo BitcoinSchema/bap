@@ -23,7 +23,7 @@ describe("Integration Test: MasterID and MemberID secure derivation flow", () =>
     const backup = member2.exportMemberBackup();
     
     // Simulate creating a new MemberID from the backup (acting as MemberID.fromBackup())
-    const importedMember = MemberID.fromBackup(backup);
+    const importedMember = MemberID.fromMemberIdentity(backup);
 
     // Verify that the imported member's address matches the backup's address
     expect(importedMember.address).toBe(backup.address);

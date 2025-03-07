@@ -11,7 +11,7 @@ import {
   ENCRYPTION_PATH,
 } from "./constants";
 import { MasterID } from "./MasterID";
-import type { Attestation, Identity, IdentityAttributes, OldIdentity, PathPrefix } from "./interface";
+import type { Attestation, Identity, IdentityAttributes, MemberIdentity, OldIdentity, PathPrefix } from "./interface";
 import { Utils } from "./utils";
 import { MemberID } from "./MemberID";
 const { toArray, toUTF8, toBase64, toHex } = BSVUtils;
@@ -709,5 +709,5 @@ export class BAP {
 };
 
 export { MasterID, MemberID };
-export type { Attestation, Identity, IdentityAttributes, PathPrefix };
+export type { Attestation, Identity, MemberIdentity, IdentityAttributes, PathPrefix };
 

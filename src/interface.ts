@@ -20,10 +20,19 @@ export interface OldIdentity extends BaseIdentity {
   idSeed?: string;  // Optional in old format
 }
 
-// New format - identity objects within container
+// New format - identity objects within container.
 export interface Identity extends BaseIdentity {
   lastIdPath: string;
   idSeed: string;
+}
+
+export interface MemberIdentity {
+  name: string;
+  description: string;
+  derivedPrivateKey: string;
+  address: string;
+  identityKey: string;
+  identityAttributes?: IdentityAttributes;
 }
 
 // New format container structure
