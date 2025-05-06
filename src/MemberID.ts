@@ -44,8 +44,7 @@ export class MemberID extends BaseClass {
 
   // Implement signOpReturnWithAIP - MemberID ignores signing path
   public signOpReturnWithAIP(
-    opReturn: number[][],
-    _signingPath?: string,
+    opReturn: number[][]
   ): number[][] {
     const aipMessageBuffer = this.getAIPMessageBuffer(opReturn);
     const { address, signature } = this.signMessage(aipMessageBuffer.flat());

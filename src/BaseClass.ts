@@ -277,10 +277,6 @@ abstract class BaseClass {
       }
     }
 
-    if (opReturn.length > 0) {
-      // add a trailing "|" - this is the AIP way
-      buffers.push(toArray("|"));
-    }
     return buffers;
   }
 

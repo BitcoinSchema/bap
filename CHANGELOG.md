@@ -1,5 +1,14 @@
 # Changelog
 
+
+## [0.1.8] - 2025-05-06
+
+### Fixed
+
+- Corrected an issue where AIP OP_RETURN signing could add two pipe ('|') separators instead of one. Now correctly adds a single pipe separator before AIP protocol information.
+- update dependencies
+
+
 ## [0.1.0] - 2025-02-03
 
 ### Breaking Changes

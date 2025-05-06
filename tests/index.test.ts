@@ -222,6 +222,32 @@ describe("BAP class", () => {
     }).toThrow();
   });
 
+  test("newId creates unique IDs", () => {
+    const randomHDPrivateKey = HD.fromRandom().toString();
+    const bap = new BAP(randomHDPrivateKey);
+    
+    // Create first ID
+    const firstId = bap.newId();
+    const firstIdKey = firstId.getIdentityKey();
+    
+    // Create second ID
+    const secondId = bap.newId();
+    const secondIdKey = secondId.getIdentityKey();
+    
+    // Verify the IDs have different keys
+    expect(secondIdKey).not.toBe(firstIdKey);
+    
+    // Verify paths are incremented
+    expect(firstId.rootPath).toBe(`${SIGNING_PATH_PREFIX}/0'/0'/0'`);
+    expect(secondId.rootPath).toBe(`${SIGNING_PATH_PREFIX}/0'/1'/0'`);
+    
+    // Verify the IDs are both tracked in the BAP instance
+    const idList = bap.listIds();
+    expect(idList).toContain(firstIdKey);
+    expect(idList).toContain(secondIdKey);
+    expect(idList.length).toBe(2);
+  });
+
   test("verifyAttestationWithAIP", () => {
     // test in id
     const bap = new BAP(HDPrivateKey);
