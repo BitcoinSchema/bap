@@ -31,6 +31,7 @@ NOTE: All examples in this document use fake identity keys, addresses and signat
 - [Revoking an attestation](#revoking-an-attestation)
 - [BAP on the BSV Metanet - PROVISIONAL](#bap-on-the-bsv-metanet---provisional)
 - [BAP w3c DID - PROVISIONAL](#bap-w3c-did---provisional)
+- [Bitcoin Backup Compatible Export Methods](#bitcoin-backup-compatible-export-methods)
 - [Extending the protocol](#extending-the-protocol)
 
 # TODO
@@ -45,6 +46,15 @@ The design goals:
 2. Decouple the signing with an address from the funding source address (ie: does not require any on-chain transactions from the signing identity address)
 3. Allow for rotation of signing keys without having to change the existing attestations
 4. Allow for creation of an infinite amount of identities, but still allow for proving of attested attributes between the identities
+
+## Library Features
+
+This JavaScript/TypeScript implementation of BAP includes:
+- Full protocol implementation for creating and managing identities
+- Hierarchical Deterministic (HD) key derivation
+- ECIES encryption/decryption for secure data transmission
+- Bitcoin-backup compatible export methods for secure identity storage
+- Comprehensive API for attestations, delegations, and identity management
 
 # Protocol
 
@@ -813,6 +823,136 @@ When keys are rotated to a new signing key the new key can be added to the DID a
     "assertionMethod": ["#key2"]
 }
 ```
+
+# Bitcoin Backup Compatible Export Methods
+
+The BAP library provides export methods that are compatible with the [bitcoin-backup](https://github.com/yourusername/bitcoin-backup) package format. These methods allow you to export master and member identities in a format that can be directly used with bitcoin-backup for secure storage.
+
+## Exporting Master Identity for Backup
+
+To export a master identity (BAP instance) in bitcoin-backup compatible format:
+
+```javascript
+const bap = new BAP('xprv...');
+
+// Export for backup with optional parameters
+const masterBackup = bap.exportForBackup(
+  'My Identity',  // optional label
+  undefined,      // optional xprv override
+  'word list...'  // optional mnemonic
+);
+
+console.log(masterBackup);
+// {
+//   ids: '...encrypted string...',
+//   xprv: 'xprv...',
+//   mnemonic: 'word list...',
+//   label: 'My Identity',
+//   createdAt: '2024-01-20T10:30:00.000Z'
+// }
+```
+
+The exported object contains:
+- `ids`: Encrypted string containing all identity information
+- `xprv`: The HD private key (extended private key)
+- `mnemonic`: BIP39 mnemonic phrase (if provided)
+- `label`: Optional descriptive label
+- `createdAt`: ISO timestamp of when the export was created
+
+## Exporting Member Identity for Backup
+
+To export a member identity in bitcoin-backup compatible format:
+
+```javascript
+// Export member from BAP instance
+const memberBackup = bap.exportMemberForBackup(
+  'alice@example.com'  // optional label
+);
+
+console.log(memberBackup);
+// {
+//   wif: 'L1...',
+//   id: '...encrypted data...',
+//   label: 'alice@example.com',
+//   createdAt: '2024-01-20T10:30:00.000Z'
+// }
+
+// Or export directly from MemberID instance
+const memberID = new MemberID('L1...');
+const memberBackup = memberID.exportForBackup('Member Label');
+```
+
+The exported object contains:
+- `wif`: Wallet Import Format private key
+- `id`: Encrypted member identity data
+- `label`: Optional descriptive label
+- `createdAt`: ISO timestamp of when the export was created
+
+## Integration with bitcoin-backup
+
+These export methods are designed to work seamlessly with the bitcoin-backup package:
+
+```javascript
+import { BAP } from 'bsv-bap';
+import { BackupService } from 'bitcoin-backup';
+
+// Initialize services
+const bap = new BAP('xprv...');
+const backupService = new BackupService();
+
+// Export and encrypt master backup
+const masterBackup = bap.exportForBackup('Primary Identity');
+const encryptedMaster = await backupService.encryptBapMaster(
+  masterBackup,
+  'password123'
+);
+
+// Export and encrypt member backup
+const memberBackup = bap.exportMemberForBackup('Work Identity');
+const encryptedMember = await backupService.encryptBapMember(
+  memberBackup,
+  'password123'
+);
+
+// Store encrypted backups securely
+await storage.save('master-backup.json', encryptedMaster);
+await storage.save('member-backup.json', encryptedMember);
+```
+
+## Restoring from Backup
+
+To restore identities from bitcoin-backup format:
+
+```javascript
+import { BAP, MemberID } from 'bsv-bap';
+import { BackupService } from 'bitcoin-backup';
+
+const backupService = new BackupService();
+
+// Restore master identity
+const encryptedMaster = await storage.load('master-backup.json');
+const masterData = await backupService.decryptBapMaster(
+  encryptedMaster,
+  'password123'
+);
+const bap = BAP.import(masterData.xprv, masterData.ids);
+
+// Restore member identity
+const encryptedMember = await storage.load('member-backup.json');
+const memberData = await backupService.decryptBapMember(
+  encryptedMember,
+  'password123'
+);
+const memberID = new MemberID(memberData.wif);
+```
+
+## Security Considerations
+
+- Always encrypt backups before storing them
+- Use strong passwords for encryption
+- Store encrypted backups in secure locations
+- Never share unencrypted private keys or mnemonics
+- Consider using hardware security modules for production systems
 
 # Extending the protocol
 

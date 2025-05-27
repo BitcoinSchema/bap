@@ -19,12 +19,12 @@ describe("MemberID Backup and Import", () => {
       email: {
         value: "test@example.com",
         nonce: "another-nonce",
-      }
+      },
     };
     const member = new MemberID(privateKey, identityAttributes);
-    
+
     const backup = member.export();
-    
+
     // Verify backup has only allowed keys
     expect(backup).toHaveProperty("derivedPrivateKey");
     expect(backup).toHaveProperty("address");
@@ -45,9 +45,11 @@ describe("MemberID Backup and Import", () => {
 
     const message = toArray("Hello, Member!", "utf8");
     const result = member.signMessage(message);
-    
+
     // The returned address should match the MemberID's public key
-    const addressFromPubKey = PublicKey.fromString(member.getPublicKey()).toAddress();
+    const addressFromPubKey = PublicKey.fromString(
+      member.getPublicKey()
+    ).toAddress();
     expect(result.address).toBe(addressFromPubKey);
     expect(typeof result.signature).toBe("string");
     expect(result.signature.length).toBeGreaterThan(0);
@@ -64,7 +66,7 @@ describe("MemberID Backup and Import", () => {
     const privateKey = PrivateKey.fromWif(testWIF);
     const identityAttributes = {
       name: { value: "Test User", nonce: "nonce1" },
-      email: { value: "test@example.com", nonce: "nonce2" }
+      email: { value: "test@example.com", nonce: "nonce2" },
     };
     const member = new MemberID(privateKey, identityAttributes);
     member.idName = "Member One";
@@ -85,10 +87,10 @@ describe("MemberID Backup and Import", () => {
     expect(imported.name).toBe(exported.name);
     expect(imported.description).toBe(exported.description);
     expect(imported.derivedPrivateKey).toBe(exported.derivedPrivateKey);
-    expect(imported.address).toBe(exported.address)
-    expect(imported.identityAttributes).not.toBeUndefined();
-    // biome-ignore lint/style/noNonNullAssertion: testing for undefined above
-    expect(imported.identityAttributes).toStrictEqual(exported.identityAttributes!);
+    expect(imported.address).toBe(exported.address);
+    expect(imported.identityAttributes).toStrictEqual(
+      exported.identityAttributes
+    );
   });
 });
 
@@ -99,29 +101,35 @@ describe("MemberID Encryption", () => {
 
     // Test data
     const testData = "This is a test message for member encryption";
-    
+
     // Get encryption keys
     const encryptionKey = member.getEncryptionKey();
     expect(encryptionKey.privKey).toBeDefined();
     expect(encryptionKey.pubKey).toBeDefined();
-    
+
     // Test encryption
     const ciphertext = member.encrypt(testData);
     expect(typeof ciphertext).toBe("string");
     expect(ciphertext).not.toBe(testData);
-    
+
     // Test decryption
     const decrypted = member.decrypt(ciphertext);
     expect(decrypted).toBe(testData);
 
     // Test encryption with counterparty
     const counterpartyKey = PrivateKey.fromRandom().toPublicKey().toString();
-    const ciphertextWithCounterparty = member.encrypt(testData, counterpartyKey);
+    const ciphertextWithCounterparty = member.encrypt(
+      testData,
+      counterpartyKey
+    );
     expect(typeof ciphertextWithCounterparty).toBe("string");
     expect(ciphertextWithCounterparty).not.toBe(testData);
-    
+
     // Test decryption with counterparty
-    const decryptedWithCounterparty = member.decrypt(ciphertextWithCounterparty, counterpartyKey);
+    const decryptedWithCounterparty = member.decrypt(
+      ciphertextWithCounterparty,
+      counterpartyKey
+    );
     expect(decryptedWithCounterparty).toBe(testData);
   });
 
@@ -145,4 +153,4 @@ describe("MemberID Encryption", () => {
     const decrypted2 = member2.decrypt(encrypted1);
     expect(decrypted2).toBe(testData);
   });
-}); 
+});

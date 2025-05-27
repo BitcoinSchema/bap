@@ -1,4 +1,7 @@
-export type IdentityAttribute = Record<"value" | "nonce", string | Record<string, string>>
+export type IdentityAttribute = Record<
+  "value" | "nonce",
+  string | Record<string, string>
+>;
 
 export interface IdentityAttributes {
   [key: string]: IdentityAttribute;
@@ -17,7 +20,7 @@ export interface BaseIdentity {
 
 // Old format - array of identities with no container
 export interface OldIdentity extends BaseIdentity {
-  idSeed?: string;  // Optional in old format
+  idSeed?: string; // Optional in old format
 }
 
 // New format - identity objects within container.

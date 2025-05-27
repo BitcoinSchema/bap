@@ -1,4 +1,11 @@
-import { BSM, Utils as BSVUtils, type PublicKey, PrivateKey, BigNumber, Hash } from "@bsv/sdk";
+import {
+  BSM,
+  Utils as BSVUtils,
+  type PublicKey,
+  PrivateKey,
+  BigNumber,
+  Hash,
+} from "@bsv/sdk";
 import type { Signature } from "@bsv/sdk";
 import { BaseClass } from "./BaseClass";
 import type { IdentityAttributes, MemberIdentity } from "./interface";
@@ -11,7 +18,7 @@ export class MemberID extends BaseClass {
   public idName: string;
   public description: string;
   public address: string;
-  public identityKey: string
+  public identityKey: string;
 
   constructor(key: PrivateKey, identityAttributes: IdentityAttributes = {}) {
     super();
@@ -24,28 +31,27 @@ export class MemberID extends BaseClass {
   }
 
   // Implement the abstract signMessage method from BaseClass
-  public signMessage(message: number[], _signingPath?: string): { address: string; signature: string } {
+  public signMessage(
+    message: number[],
+    _signingPath?: string
+  ): { address: string; signature: string } {
     const childPk = this.key;
     const address = childPk.toAddress();
-    
+
     // Sign using the raw message buffer directly
-    const dummySig = BSM.sign(message, childPk, 'raw') as Signature;
+    const dummySig = BSM.sign(message, childPk, "raw") as Signature;
     const h = new BigNumber(magicHash(message));
     const r = dummySig.CalculateRecoveryFactor(childPk.toPublicKey(), h);
-    
-    const signature = (BSM.sign(message, childPk, 'raw') as Signature).toCompact(
-      r,
-      true,
-      "base64"
-    ) as string;
-    
+
+    const signature = (
+      BSM.sign(message, childPk, "raw") as Signature
+    ).toCompact(r, true, "base64") as string;
+
     return { address, signature };
   }
 
   // Implement signOpReturnWithAIP - MemberID ignores signing path
-  public signOpReturnWithAIP(
-    opReturn: number[][]
-  ): number[][] {
+  public signOpReturnWithAIP(opReturn: number[][]): number[][] {
     const aipMessageBuffer = this.getAIPMessageBuffer(opReturn);
     const { address, signature } = this.signMessage(aipMessageBuffer.flat());
     return this.formatAIPOutput(aipMessageBuffer, address, signature);
@@ -72,7 +78,7 @@ export class MemberID extends BaseClass {
     return member;
   }
 
-  static fromBackup(singleBackup: {wif:string, id: string}): MemberID {
+  static fromBackup(singleBackup: { wif: string; id: string }): MemberID {
     // decrypt the id and set the details
     const member = new MemberID(PrivateKey.fromWif(singleBackup.wif));
     const id = JSON.parse(member.decrypt(singleBackup.id));
@@ -96,13 +102,15 @@ export class MemberID extends BaseClass {
    * Get the encryption key pair for this identity
    * We use the same key for both signing and encryption for simplicity
    */
-  getEncryptionKey(): { privKey: PrivateKey, pubKey: PublicKey } {
+  getEncryptionKey(): { privKey: PrivateKey; pubKey: PublicKey } {
     // Derive the encryption key from the private key using the ENCRYPTION_PATH
-    // Since member keys are not HD keys, we use the path as the invoice number, 
+    // Since member keys are not HD keys, we use the path as the invoice number,
     // and use our own public key as the other party's public key
     return {
       privKey: this.key.deriveChild(this.key.toPublicKey(), ENCRYPTION_PATH),
-      pubKey: this.key.deriveChild(this.key.toPublicKey(), ENCRYPTION_PATH).toPublicKey()
+      pubKey: this.key
+        .deriveChild(this.key.toPublicKey(), ENCRYPTION_PATH)
+        .toPublicKey(),
     };
   }
 
@@ -112,5 +120,27 @@ export class MemberID extends BaseClass {
   getEncryptionPublicKey(): string {
     const { pubKey } = this.getEncryptionKey();
     return pubKey.toString();
+  }
+
+  /**
+   * Export member data in bitcoin-backup compatible format
+   * @param label Optional user-defined label
+   * @returns BapMemberBackup compatible object
+   */
+  exportForBackup(label?: string): {
+    wif: string;
+    id: string;
+    label?: string;
+    createdAt: string;
+  } {
+    const memberData = this.export();
+    const encryptedData = this.encrypt(JSON.stringify(memberData));
+
+    return {
+      wif: this.key.toWif(),
+      id: encryptedData,
+      ...(label && { label }),
+      createdAt: new Date().toISOString(),
+    };
   }
 }

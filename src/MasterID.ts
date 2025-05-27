@@ -1,8 +1,19 @@
-import { BSM, Utils as BSVUtils, ECIES, Hash, PublicKey, type PrivateKey, BigNumber } from "@bsv/sdk";
+import {
+  BSM,
+  Utils as BSVUtils,
+  ECIES,
+  Hash,
+  PublicKey,
+  type PrivateKey,
+  BigNumber,
+} from "@bsv/sdk";
 import type { HD, Signature } from "@bsv/sdk";
 
 import { type APIFetcher, apiFetcher } from "./api";
-import type { GetAttestationResponse, GetSigningKeysResponse } from "./apiTypes";
+import type {
+  GetAttestationResponse,
+  GetSigningKeysResponse,
+} from "./apiTypes";
 import {
   AIP_BITCOM_ADDRESS,
   BAP_BITCOM_ADDRESS,
@@ -19,7 +30,7 @@ import type {
   MemberIdentity,
 } from "./interface";
 import { Utils } from "./utils";
-import { MemberID } from './MemberID';
+import { MemberID } from "./MemberID";
 import { BaseClass } from "./BaseClass";
 const { toArray, toHex, toBase58, toUTF8, toBase64 } = BSVUtils;
 const { electrumDecrypt, electrumEncrypt } = ECIES;
@@ -47,15 +58,15 @@ class MasterID extends BaseClass {
   identityKey: string;
   identityAttributes: IdentityAttributes;
 
-  getApiData: APIFetcher
+  getApiData: APIFetcher;
 
   constructor(
     HDPrivateKey: HD,
     identityAttributes: IdentityAttributes = {},
-    idSeed = "",
+    idSeed = ""
   ) {
     super();
-    
+
     if (idSeed) {
       // create a new HDPrivateKey based on the seed
       const seedHex = toHex(Hash.sha256(idSeed, "utf8"));
@@ -113,7 +124,7 @@ class MasterID extends BaseClass {
    * @returns {{}}
    */
   parseAttributes(
-    identityAttributes: IdentityAttributes | string,
+    identityAttributes: IdentityAttributes | string
   ): IdentityAttributes {
     if (typeof identityAttributes === "string") {
       return this.parseStringUrns(identityAttributes);
@@ -273,7 +284,7 @@ class MasterID extends BaseClass {
     /* eslint-disable max-len */
     if (
       path.match(
-        /\/[0-9]{1,10}'?\/[0-9]{1,10}'?\/[0-9]{1,10}'?\/[0-9]{1,10}'?\/[0-9]{1,10}'?\/[0-9]{1,10}'?/,
+        /\/[0-9]{1,10}'?\/[0-9]{1,10}'?\/[0-9]{1,10}'?\/[0-9]{1,10}'?\/[0-9]{1,10}'?\/[0-9]{1,10}'?/
       )
     ) {
       const pathValues = path.split("/");
@@ -310,7 +321,7 @@ class MasterID extends BaseClass {
   getIdTransaction(previousPath = "") {
     if (this.#currentPath === this.#rootPath) {
       throw new Error(
-        "Current path equals rootPath. ID was probably not initialized properly",
+        "Current path equals rootPath. ID was probably not initialized properly"
       );
     }
 
@@ -323,7 +334,7 @@ class MasterID extends BaseClass {
 
     return this.signOpReturnWithAIP(
       opReturn,
-      previousPath || this.#previousPath,
+      previousPath || this.#previousPath
     );
   }
 
@@ -350,24 +361,27 @@ class MasterID extends BaseClass {
   /**
    * Get the encryption key pair for this identity
    */
-  getEncryptionKey(): { privKey: PrivateKey, pubKey: PublicKey } {
+  getEncryptionKey(): { privKey: PrivateKey; pubKey: PublicKey } {
     const HDPrivateKey = this.#HDPrivateKey.derive(this.#rootPath);
     const encryptionKey = HDPrivateKey.derive(ENCRYPTION_PATH).privKey;
     return {
       privKey: encryptionKey,
-      pubKey: encryptionKey.toPublicKey()
+      pubKey: encryptionKey.toPublicKey(),
     };
   }
 
   /**
    * Get the encryption key using type 42 (different key / incompatible with above)
    */
-  getEncryptionKeyType42(): { privKey: PrivateKey, pubKey: PublicKey } {
+  getEncryptionKeyType42(): { privKey: PrivateKey; pubKey: PublicKey } {
     const HDPrivateKey = this.#HDPrivateKey.derive(this.#rootPath);
-    const encryptionKey = HDPrivateKey.privKey.deriveChild(HDPrivateKey.toPublic().pubKey, ENCRYPTION_PATH);
+    const encryptionKey = HDPrivateKey.privKey.deriveChild(
+      HDPrivateKey.toPublic().pubKey,
+      ENCRYPTION_PATH
+    );
     return {
       privKey: encryptionKey,
-      pubKey: encryptionKey.toPublicKey()
+      pubKey: encryptionKey.toPublicKey(),
     };
   }
   /**
@@ -410,11 +424,13 @@ class MasterID extends BaseClass {
   decrypt(ciphertext: string, counterPartyPublicKey?: string): string {
     const HDPrivateKey = this.#HDPrivateKey.derive(this.#rootPath);
     const encryptionKey = HDPrivateKey.derive(ENCRYPTION_PATH).privKey;
-    let pubKey = undefined
+    let pubKey = undefined;
     if (counterPartyPublicKey) {
       pubKey = PublicKey.fromString(counterPartyPublicKey);
     }
-    return toUTF8(electrumDecrypt(toArray(ciphertext, "base64"), encryptionKey, pubKey));
+    return toUTF8(
+      electrumDecrypt(toArray(ciphertext, "base64"), encryptionKey, pubKey)
+    );
   }
 
   /**
@@ -427,14 +443,16 @@ class MasterID extends BaseClass {
   encryptWithSeed(
     stringData: string,
     seed: string,
-    counterPartyPublicKey?: string,
+    counterPartyPublicKey?: string
   ): string {
     const encryptionKey = this.getEncryptionPrivateKeyWithSeed(seed);
     const publicKey = encryptionKey.toPublicKey();
     const pubKey = counterPartyPublicKey
       ? PublicKey.fromString(counterPartyPublicKey)
       : publicKey;
-    return toBase64(electrumEncrypt(toArray(stringData), pubKey, encryptionKey));
+    return toBase64(
+      electrumEncrypt(toArray(stringData), pubKey, encryptionKey)
+    );
   }
 
   /**
@@ -443,13 +461,19 @@ class MasterID extends BaseClass {
    * @param seed String seed
   //  * @param counterPartyPublicKey Public key of the counterparty
    */
-  decryptWithSeed(ciphertext: string, seed: string, counterPartyPublicKey?: string): string {
+  decryptWithSeed(
+    ciphertext: string,
+    seed: string,
+    counterPartyPublicKey?: string
+  ): string {
     const encryptionKey = this.getEncryptionPrivateKeyWithSeed(seed);
-    let pubKey = undefined
+    let pubKey = undefined;
     if (counterPartyPublicKey) {
       pubKey = PublicKey.fromString(counterPartyPublicKey);
     }
-    return toUTF8(electrumDecrypt(toArray(ciphertext, "base64"), encryptionKey, pubKey));
+    return toUTF8(
+      electrumDecrypt(toArray(ciphertext, "base64"), encryptionKey, pubKey)
+    );
   }
 
   private getEncryptionPrivateKeyWithSeed(seed: string) {
@@ -494,23 +518,21 @@ class MasterID extends BaseClass {
    * @param signingPath
    * @returns {{address: string, signature: string}}
    */
-  signMessage(message: number[], signingPath?: string): { address: string; signature: string } {
+  signMessage(
+    message: number[],
+    signingPath?: string
+  ): { address: string; signature: string } {
     const pathToUse = signingPath || this.#currentPath;
     const childPk = this.#HDPrivateKey.derive(pathToUse).privKey;
     const address = childPk.toAddress();
 
     // Needed to calculate the recovery factor
-    const dummySig = BSM.sign(message, childPk, 'raw') as Signature;
+    const dummySig = BSM.sign(message, childPk, "raw") as Signature;
     const h = new BigNumber(magicHash(message));
-    const r = dummySig.CalculateRecoveryFactor(
-      childPk.toPublicKey(),
-      h,
-    );
-    const signature = (BSM.sign(message, childPk, 'raw') as Signature).toCompact(
-      r,
-      true,
-      "base64"
-    ) as string;
+    const r = dummySig.CalculateRecoveryFactor(childPk.toPublicKey(), h);
+    const signature = (
+      BSM.sign(message, childPk, "raw") as Signature
+    ).toCompact(r, true, "base64") as string;
 
     return { address, signature };
   }
@@ -529,7 +551,7 @@ class MasterID extends BaseClass {
    */
   signMessageWithSeed(
     message: string,
-    seed: string,
+    seed: string
   ): { address: string; signature: string } {
     const pathHex = toHex(Hash.sha256(seed, "utf8"));
     const path = Utils.getSigningPathFromHex(pathHex);
@@ -539,19 +561,21 @@ class MasterID extends BaseClass {
     const address = derivedChild.privKey.toPublicKey().toAddress();
 
     const messageArray = toArray(message, "utf8");
-    const dummySig = BSM.sign(messageArray, derivedChild.privKey, 'raw') as Signature;
+    const dummySig = BSM.sign(
+      messageArray,
+      derivedChild.privKey,
+      "raw"
+    ) as Signature;
 
     const h = new BigNumber(magicHash(messageArray));
     const r = dummySig.CalculateRecoveryFactor(
       derivedChild.privKey.toPublicKey(),
-      h,
+      h
     );
 
-    const signature = (BSM.sign(messageArray, derivedChild.privKey, 'raw') as Signature).toCompact(
-      r,
-      true,
-      "base64"
-    ) as string;
+    const signature = (
+      BSM.sign(messageArray, derivedChild.privKey, "raw") as Signature
+    ).toCompact(r, true, "base64") as string;
 
     return { address, signature };
   }
@@ -562,12 +586,12 @@ class MasterID extends BaseClass {
    * @param signingPath {string}
    * @return {number[]}
    */
-  signOpReturnWithAIP(
-    opReturn: number[][],
-    signingPath = "",
-  ): number[][] {
+  signOpReturnWithAIP(opReturn: number[][], signingPath = ""): number[][] {
     const aipMessageBuffer = this.getAIPMessageBuffer(opReturn);
-    const { address, signature } = this.signMessage(aipMessageBuffer.flat(), signingPath);
+    const { address, signature } = this.signMessage(
+      aipMessageBuffer.flat(),
+      signingPath
+    );
     return this.formatAIPOutput(opReturn, address, signature);
   }
 
@@ -575,9 +599,12 @@ class MasterID extends BaseClass {
    * Get all signing keys for this identity
    */
   async getIdSigningKeys(): Promise<GetSigningKeysResponse> {
-    const signingKeys = await this.getApiData<GetSigningKeysResponse>("/signing-keys", {
-      idKey: this.identityKey,
-    });
+    const signingKeys = await this.getApiData<GetSigningKeysResponse>(
+      "/signing-keys",
+      {
+        idKey: this.identityKey,
+      }
+    );
     console.log("getIdSigningKeys", signingKeys);
 
     return signingKeys;
@@ -588,15 +615,20 @@ class MasterID extends BaseClass {
    *
    * @param attribute
    */
-  async getAttributeAttestations(attribute: string): Promise<GetAttestationResponse> {
+  async getAttributeAttestations(
+    attribute: string
+  ): Promise<GetAttestationResponse> {
     // This function needs to make a call to a BAP server to get all the attestations for this
     // identity for the given attribute
     const attestationHash = this.getAttestationHash(attribute);
 
     // get all BAP ATTEST records for the given attestationHash
-    const attestations = await this.getApiData<GetAttestationResponse>("/attestation/get", {
-      hash: attestationHash,
-    });
+    const attestations = await this.getApiData<GetAttestationResponse>(
+      "/attestation/get",
+      {
+        hash: attestationHash,
+      }
+    );
     console.log("getAttestations", attribute, attestationHash, attestations);
 
     return attestations;
@@ -615,7 +647,7 @@ class MasterID extends BaseClass {
     this.rootAddress = identity.rootAddress;
     this.#previousPath = identity.previousPath;
     this.#currentPath = identity.currentPath;
-    this.#idSeed = ('idSeed' in identity ? identity.idSeed : "") || "";
+    this.#idSeed = ("idSeed" in identity ? identity.idSeed : "") || "";
     this.identityAttributes = this.parseAttributes(identity.identityAttributes);
   }
 
@@ -658,6 +690,27 @@ class MasterID extends BaseClass {
     const derivedKey = this.#HDPrivateKey.derive(this.#currentPath).privKey;
     return new MemberID(derivedKey);
   }
+
+  /**
+   * Export member data in bitcoin-backup compatible format
+   * @returns Object with wif and encrypted member data
+   */
+  exportMember(): { wif: string; encryptedData: string } {
+    const memberExport = this.exportMemberBackup();
+    const derivedKey = this.#HDPrivateKey.derive(this.#currentPath).privKey;
+
+    // Encrypt the member data using ECIES
+    const encryptedData = toBase64(
+      electrumEncrypt(
+        toArray(JSON.stringify(memberExport)),
+        derivedKey.toPublicKey()
+      )
+    );
+
+    return {
+      wif: memberExport.derivedPrivateKey,
+      encryptedData,
+    };
+  }
 }
 export { MasterID };
-

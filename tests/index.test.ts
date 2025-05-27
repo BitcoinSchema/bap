@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
 
-import { BSM, BigNumber, HD, PrivateKey, type Signature, Utils } from "@bsv/sdk";
+import {
+  BSM,
+  BigNumber,
+  HD,
+  PrivateKey,
+  type Signature,
+  Utils,
+} from "@bsv/sdk";
 import { BAP } from "../src";
 import { ENCRYPTION_PATH, SIGNING_PATH_PREFIX } from "../src/constants";
 import { MasterID } from "../src/MasterID";
@@ -37,15 +44,17 @@ describe("BAP class", () => {
     testBAPInstance(bap);
 
     expect(bap.getPublicKey()).toBe(
-      "02c23e9fc6a959bb5315159ac7438c5a6bff37c7197326d1060b176e3969d72af5",
+      "02c23e9fc6a959bb5315159ac7438c5a6bff37c7197326d1060b176e3969d72af5"
     );
     expect(bap.getPublicKey(ENCRYPTION_PATH)).toBe(
-      "02fc759e24d922c2d47766710613910c0f40bab7439777af9ad45bff55ec622994",
+      "02fc759e24d922c2d47766710613910c0f40bab7439777af9ad45bff55ec622994"
     );
 
     expect(bap.getHdPublicKey()).toBe(HDPublicKey);
     // eslint-disable-next-line max-len
-    expect(bap.getHdPublicKey(ENCRYPTION_PATH)).toBe("xpub6CXbFY2NumUP1dVRRbXiAdj6oRhqK3zQjt1vdzsTBfy3jDLjHMTCCE7AX6fz1KqAag9EPGf52KyCAT9iovKrXZ74BSryrDQ2XBHiawuFfsu");
+    expect(bap.getHdPublicKey(ENCRYPTION_PATH)).toBe(
+      "xpub6CXbFY2NumUP1dVRRbXiAdj6oRhqK3zQjt1vdzsTBfy3jDLjHMTCCE7AX6fz1KqAag9EPGf52KyCAT9iovKrXZ74BSryrDQ2XBHiawuFfsu"
+    );
   });
 
   test("set BAP_SERVER", () => {
@@ -218,29 +227,29 @@ describe("BAP class", () => {
     expect(newId4.currentPath).toBe(`${SIGNING_PATH_PREFIX}/123'/124'/1'`);
 
     expect(() => {
-      bap.newId("/123erg/124ggg/0")
+      bap.newId("/123erg/124ggg/0");
     }).toThrow();
   });
 
   test("newId creates unique IDs", () => {
     const randomHDPrivateKey = HD.fromRandom().toString();
     const bap = new BAP(randomHDPrivateKey);
-    
+
     // Create first ID
     const firstId = bap.newId();
     const firstIdKey = firstId.getIdentityKey();
-    
+
     // Create second ID
     const secondId = bap.newId();
     const secondIdKey = secondId.getIdentityKey();
-    
+
     // Verify the IDs have different keys
     expect(secondIdKey).not.toBe(firstIdKey);
-    
+
     // Verify paths are incremented
     expect(firstId.rootPath).toBe(`${SIGNING_PATH_PREFIX}/0'/0'/0'`);
     expect(secondId.rootPath).toBe(`${SIGNING_PATH_PREFIX}/0'/1'/0'`);
-    
+
     // Verify the IDs are both tracked in the BAP instance
     const idList = bap.listIds();
     expect(idList).toContain(firstIdKey);
@@ -265,10 +274,10 @@ describe("BAP class", () => {
     expect(bapId).not.toBeNull();
     expect(bapId?.getAttribute("name")?.value).toBe("John Doe");
     expect(bapId?.getAttribute("name")?.nonce).toBe(
-      "e2c6fb4063cc04af58935737eaffc938011dff546d47b7fbb18ed346f8c4d4fa",
+      "e2c6fb4063cc04af58935737eaffc938011dff546d47b7fbb18ed346f8c4d4fa"
     );
     expect(bapId?.getAttributeUrn("name")).toBe(
-      "urn:bap:id:name:John Doe:e2c6fb4063cc04af58935737eaffc938011dff546d47b7fbb18ed346f8c4d4fa",
+      "urn:bap:id:name:John Doe:e2c6fb4063cc04af58935737eaffc938011dff546d47b7fbb18ed346f8c4d4fa"
     );
   });
 
@@ -286,14 +295,14 @@ describe("BAP class", () => {
     const attestationHash = userId.getAttestationHash("name");
     expect(attestationHash).not.toBeNull();
     expect(attestationHash).toBe(
-      "d6cbf280ad7515e549c7b154a02555fff3eeb05c6b245039813d39d3c0397b4a",
+      "d6cbf280ad7515e549c7b154a02555fff3eeb05c6b245039813d39d3c0397b4a"
     );
 
     // create a signing transaction of the user's hash with our own identity key
     const transaction = bap.signAttestationWithAIP(
       // biome-ignore lint/style/noNonNullAssertion: gauranteed to be non-null
       attestationHash!,
-      identityKey,
+      identityKey
     );
     expect(transaction.length).toBe(10);
     const verify = bap.verifyAttestationWithAIP(transaction);
@@ -314,7 +323,7 @@ describe("BAP class", () => {
     const attestationHash = userId.getAttestationHash("name");
     expect(attestationHash).not.toBeNull();
     expect(attestationHash).toBe(
-      "d6cbf280ad7515e549c7b154a02555fff3eeb05c6b245039813d39d3c0397b4a",
+      "d6cbf280ad7515e549c7b154a02555fff3eeb05c6b245039813d39d3c0397b4a"
     );
 
     // create a signing transaction of the user's hash with our own identity key
@@ -324,11 +333,11 @@ describe("BAP class", () => {
       attestationHash!,
       identityKey,
       0,
-      dataString,
+      dataString
     );
     expect(transaction.length).toBe(15);
     const verify = bap.verifyAttestationWithAIP(transaction);
-    console.log({verify})
+    console.log({ verify });
 
     expect(verify.verified).toBe(true);
   });
@@ -360,21 +369,23 @@ describe("BAP class", () => {
     expect(idKeys.length).toBe(2);
   });
 
-  test('verifyChallengeSignature', async () => {
-    console.log('Starting verifyChallengeSignature test');
+  test("verifyChallengeSignature", async () => {
+    console.log("Starting verifyChallengeSignature test");
 
     // Store original fetch
     const originalFetch = global.fetch;
 
     try {
       // Use the specified WIF private key
-      const privateKey = PrivateKey.fromWif('L4C6X6aJccc5KDzJRTLqskz6gxAwUx9QJVi2S4BZATfdzjw8TUJH');
+      const privateKey = PrivateKey.fromWif(
+        "L4C6X6aJccc5KDzJRTLqskz6gxAwUx9QJVi2S4BZATfdzjw8TUJH"
+      );
       const address = privateKey.toAddress();
-      const message = 'test message';
+      const message = "test message";
 
       // Create signature
       const msg = toArray(message);
-      const dummySig = BSM.sign(msg, privateKey, 'raw') as Signature;
+      const dummySig = BSM.sign(msg, privateKey, "raw") as Signature;
       const h = new BigNumber(BSM.magicHash(msg));
       const r = dummySig.CalculateRecoveryFactor(privateKey.toPublicKey(), h);
       const signature = dummySig.toCompact(r, true, "base64") as string;
@@ -383,17 +394,17 @@ describe("BAP class", () => {
 
       // Test local verification first
       const localVerify = bap.verifySignature(message, address, signature);
-      console.log('Local verification result:', localVerify);
+      console.log("Local verification result:", localVerify);
       expect(localVerify).toBe(true);
 
       // Override fetch with mock implementation
       global.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-        console.log('Mock fetch called with:', {
+        console.log("Mock fetch called with:", {
           input,
           init: {
             ...init,
-            body: init?.body ? JSON.parse(init.body as string) : undefined
-          }
+            body: init?.body ? JSON.parse(init.body as string) : undefined,
+          },
         });
 
         // Mock API response matching AttestationValidResponse type
@@ -402,15 +413,15 @@ describe("BAP class", () => {
           result: {
             valid: true,
             block: 12345,
-            timestamp: Date.now()
-          }
+            timestamp: Date.now(),
+          },
         };
 
         return new Response(JSON.stringify(mockResponse), {
           status: 200,
           headers: {
-            'Content-Type': 'application/json'
-          }
+            "Content-Type": "application/json",
+          },
         });
       }) as typeof global.fetch;
 
@@ -421,9 +432,8 @@ describe("BAP class", () => {
         message,
         signature
       );
-      console.log('Challenge verification result:', result);
+      console.log("Challenge verification result:", result);
       expect(result).toBe(true);
-
     } finally {
       // Restore original fetch
       global.fetch = originalFetch;

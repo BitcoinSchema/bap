@@ -11,17 +11,17 @@ const { toArray } = Utils;
 describe("Integration Test: MasterID and MemberID secure derivation flow", () => {
   test("Create master id, derive member ids, export second member backup, and import it into a new MemberID", () => {
     // Use a fixed master key for testing
-    const testMasterWIF = "xprv9s21ZrQH143K4CwNNfZMtuZLSinrrbh6KUbJJgxLxPWpisKUWKYRrniPAjYRZbopxuzWNUMwuMj9VzWHfKw1yJ8Ktc4ZPPuFcrRqQ3EE3xW";
+    const testMasterWIF =
+      "xprv9s21ZrQH143K4CwNNfZMtuZLSinrrbh6KUbJJgxLxPWpisKUWKYRrniPAjYRZbopxuzWNUMwuMj9VzWHfKw1yJ8Ktc4ZPPuFcrRqQ3EE3xW";
     const masterId = new BAP(testMasterWIF);
-
 
     // Derive three member ids
     const _member1 = masterId.newId();
     const member2 = masterId.newId();
-    
+
     // Export backup for the second member id
     const backup = member2.exportMemberBackup();
-    
+
     // Simulate creating a new MemberID from the backup (acting as MemberID.fromBackup())
     const importedMember = MemberID.fromMemberIdentity(backup);
 
@@ -39,4 +39,4 @@ describe("Integration Test: MasterID and MemberID secure derivation flow", () =>
     // preventing direct compromise of the master key.
     expect(backup.derivedPrivateKey).not.toBe(testMasterWIF);
   });
-}); 
+});

@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes } from "node:crypto";
 import type { PathPrefix } from "./interface.js";
 
 export const Utils = {
@@ -8,7 +8,7 @@ export const Utils = {
    * @returns {string}
    */
   getRandomString(length = 32) {
-    return randomBytes(length).toString('hex');
+    return randomBytes(length).toString("hex");
   },
 
   /**
@@ -20,16 +20,16 @@ export const Utils = {
    */
   getSigningPathFromHex(hexString: string, hardened = true) {
     // "m/0/0/1"
-    let signingPath = 'm';
+    let signingPath = "m";
     const signingHex = hexString.match(/.{1,8}/g);
     if (!signingHex) {
-      throw new Error('Invalid hex string');
+      throw new Error("Invalid hex string");
     }
     const maxNumber = 2147483648 - 1; // 0x80000000
     for (const hexNumber of signingHex) {
       let number = Number(`0x${hexNumber}`);
       if (number > maxNumber) number -= maxNumber;
-      signingPath += `/${number}${(hardened ? "'" : '')}`;
+      signingPath += `/${number}${hardened ? "'" : ""}`;
     }
 
     return signingPath;
@@ -42,19 +42,21 @@ export const Utils = {
    * @returns {*}
    */
   getNextIdentityPath(path: string): PathPrefix {
-    const pathValues = path.split('/');
+    const pathValues = path.split("/");
     const secondToLastPart = pathValues[pathValues.length - 2];
 
     let hardened = false;
-    if (secondToLastPart.match('\'')) {
+    if (secondToLastPart.match("'")) {
       hardened = true;
     }
 
-    const nextPath = (Number(secondToLastPart.replace(/[^0-9]/g, '')) + 1).toString();
-    pathValues[pathValues.length - 2] = nextPath + (hardened ? '\'' : '');
-    pathValues[pathValues.length - 1] = `0${hardened ? '\'' : ''}`;
+    const nextPath = (
+      Number(secondToLastPart.replace(/[^0-9]/g, "")) + 1
+    ).toString();
+    pathValues[pathValues.length - 2] = nextPath + (hardened ? "'" : "");
+    pathValues[pathValues.length - 1] = `0${hardened ? "'" : ""}`;
 
-    return pathValues.join('/') as PathPrefix;
+    return pathValues.join("/") as PathPrefix;
   },
 
   /**
@@ -64,14 +66,14 @@ export const Utils = {
    * @returns {*}
    */
   getNextPath(path: string) {
-    const pathValues = path.split('/');
+    const pathValues = path.split("/");
     const lastPart = pathValues[pathValues.length - 1];
     let hardened = false;
-    if (lastPart.match('\'')) {
+    if (lastPart.match("'")) {
       hardened = true;
     }
-    const nextPath = (Number(lastPart.replace(/[^0-9]/g, '')) + 1).toString();
-    pathValues[pathValues.length - 1] = nextPath + (hardened ? '\'' : '');
-    return pathValues.join('/');
+    const nextPath = (Number(lastPart.replace(/[^0-9]/g, "")) + 1).toString();
+    pathValues[pathValues.length - 1] = nextPath + (hardened ? "'" : "");
+    return pathValues.join("/");
   },
 };

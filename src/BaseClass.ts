@@ -15,12 +15,15 @@ abstract class BaseClass {
    * @param signingPath - Optional signing path for HD wallets
    * @returns Object containing address and signature
    */
-  abstract signMessage(message: number[], signingPath?: string): { address: string; signature: string };
+  abstract signMessage(
+    message: number[],
+    signingPath?: string
+  ): { address: string; signature: string };
 
   /**
    * Abstract method that must be implemented by derived classes to get encryption key
    */
-  abstract getEncryptionKey(): { privKey: PrivateKey, pubKey: PublicKey };
+  abstract getEncryptionKey(): { privKey: PrivateKey; pubKey: PublicKey };
 
   /**
    * Encrypt the given string data with the identity encryption key
@@ -33,7 +36,9 @@ abstract class BaseClass {
     const targetPubKey = counterPartyPublicKey
       ? PublicKey.fromString(counterPartyPublicKey)
       : pubKey;
-    return toBase64(electrumEncrypt(toArray(stringData), targetPubKey, privKey));
+    return toBase64(
+      electrumEncrypt(toArray(stringData), targetPubKey, privKey)
+    );
   }
 
   /**
@@ -47,7 +52,9 @@ abstract class BaseClass {
     if (counterPartyPublicKey) {
       pubKey = PublicKey.fromString(counterPartyPublicKey);
     }
-    return toUTF8(electrumDecrypt(toArray(ciphertext, "base64"), privKey, pubKey));
+    return toUTF8(
+      electrumDecrypt(toArray(ciphertext, "base64"), privKey, pubKey)
+    );
   }
 
   /**
@@ -57,12 +64,12 @@ abstract class BaseClass {
    * @param signingPath {string}
    * @return {number[]}
    */
-  signOpReturnWithAIP(
-    opReturn: number[][],
-    signingPath?: string,
-  ): number[][] {
+  signOpReturnWithAIP(opReturn: number[][], signingPath?: string): number[][] {
     const aipMessageBuffer = this.getAIPMessageBuffer(opReturn);
-    const { address, signature } = this.signMessage(aipMessageBuffer.flat(), signingPath);
+    const { address, signature } = this.signMessage(
+      aipMessageBuffer.flat(),
+      signingPath
+    );
     return this.formatAIPOutput(aipMessageBuffer, address, signature);
   }
 
@@ -92,7 +99,10 @@ abstract class BaseClass {
    * @param attributeName string
    * @param attributeValue any
    */
-  setAttribute(attributeName: string, attributeValue: string | Record<string, string>): void {
+  setAttribute(
+    attributeName: string,
+    attributeValue: string | Record<string, string>
+  ): void {
     if (!attributeValue) {
       return;
     }
@@ -196,7 +206,7 @@ abstract class BaseClass {
    * @returns {IdentityAttributes}
    */
   protected parseAttributes(
-    identityAttributes: IdentityAttributes | string,
+    identityAttributes: IdentityAttributes | string
   ): IdentityAttributes {
     if (typeof identityAttributes === "string") {
       return this.parseStringUrns(identityAttributes);
@@ -218,12 +228,12 @@ abstract class BaseClass {
     attributeName: string,
     attributeValue: string | Record<string, string>
   ): void {
-    if (typeof attributeValue === 'string') {
+    if (typeof attributeValue === "string") {
       this.identityAttributes[attributeName].value = attributeValue;
       return;
     }
 
-    this.identityAttributes[attributeName].value = attributeValue.value || '';
+    this.identityAttributes[attributeName].value = attributeValue.value || "";
     if (attributeValue.nonce) {
       this.identityAttributes[attributeName].nonce = attributeValue.nonce;
     }
@@ -236,14 +246,14 @@ abstract class BaseClass {
     attributeName: string,
     attributeValue: string | Record<string, string>
   ): void {
-    if (typeof attributeValue === 'string') {
+    if (typeof attributeValue === "string") {
       this.addAttribute(attributeName, attributeValue);
       return;
     }
 
     this.addAttribute(
       attributeName,
-      attributeValue.value || '',
+      attributeValue.value || "",
       attributeValue.nonce
     );
   }
@@ -253,13 +263,15 @@ abstract class BaseClass {
    * @param opReturn
    * @returns {number[]} Array of numbers representing the buffer
    */
-  protected getAIPMessageBuffer(opReturn: number[][], indicies?: number[]): number[][] {
-
+  protected getAIPMessageBuffer(
+    opReturn: number[][],
+    indicies?: number[]
+  ): number[][] {
     // locate the position of OP_RETURN in the opReturn array
-    let opReturnIndex = opReturn.findIndex(op => op[0] === OP.OP_RETURN);
+    let opReturnIndex = opReturn.findIndex((op) => op[0] === OP.OP_RETURN);
     const buffers: number[][] = [];
 
-      // include OP_RETURN in constructing the signature buffer
+    // include OP_RETURN in constructing the signature buffer
     if (opReturnIndex === -1) {
       buffers.push([OP.OP_RETURN]);
       opReturnIndex = 0;
@@ -290,7 +302,7 @@ abstract class BaseClass {
   protected formatAIPOutput(
     opReturnBuffers: number[][],
     address: string,
-    signature: string,
+    signature: string
   ): number[][] {
     // Add AIP protocol elements
     const aipElements = [
@@ -302,10 +314,7 @@ abstract class BaseClass {
     ];
 
     // Concatenate all buffers
-    return [
-      ...opReturnBuffers,
-      ...aipElements
-    ];
+    return [...opReturnBuffers, ...aipElements];
   }
 }
 

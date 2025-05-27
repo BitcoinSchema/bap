@@ -1,8 +1,8 @@
-import type { Organization, Person, WithContext } from 'schema-dts';
+import type { Organization, Person, WithContext } from "schema-dts";
 
 // Base API Response type
 export interface APIResponse<T> {
-  status: 'success' | 'error';
+  status: "success" | "error";
   result?: T;
   message?: string;
 }

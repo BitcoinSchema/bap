@@ -1,8 +1,21 @@
-import { BSM, BigNumber, ECIES, HD, OP, type PublicKey, Signature } from "@bsv/sdk";
+import {
+  BSM,
+  BigNumber,
+  ECIES,
+  HD,
+  OP,
+  type PublicKey,
+  Signature,
+} from "@bsv/sdk";
 
 import { Utils as BSVUtils } from "@bsv/sdk";
 import { type APIFetcher, apiFetcher } from "./api";
-import type { AttestationValidResponse, GetAttestationResponse, GetIdentityByAddressResponse, GetIdentityResponse } from "./apiTypes";
+import type {
+  AttestationValidResponse,
+  GetAttestationResponse,
+  GetIdentityByAddressResponse,
+  GetIdentityResponse,
+} from "./apiTypes";
 import {
   AIP_BITCOM_ADDRESS,
   BAP_BITCOM_ADDRESS,
@@ -11,14 +24,20 @@ import {
   ENCRYPTION_PATH,
 } from "./constants";
 import { MasterID } from "./MasterID";
-import type { Attestation, Identity, IdentityAttributes, MemberIdentity, OldIdentity, PathPrefix } from "./interface";
+import type {
+  Attestation,
+  Identity,
+  IdentityAttributes,
+  MemberIdentity,
+  OldIdentity,
+  PathPrefix,
+} from "./interface";
 import { Utils } from "./utils";
 import { MemberID } from "./MemberID";
 const { toArray, toUTF8, toBase64, toHex } = BSVUtils;
 const { electrumEncrypt, electrumDecrypt } = ECIES;
 
 type Identities = { lastIdPath: string; ids: Identity[] };
-
 
 /**
  * BAP class
@@ -144,7 +163,11 @@ export class BAP {
    * @param idSeed
    * @returns {*}
    */
-  newId(path?: string, identityAttributes: IdentityAttributes = {}, idSeed = ""): MasterID {
+  newId(
+    path?: string,
+    identityAttributes: IdentityAttributes = {},
+    idSeed = ""
+  ): MasterID {
     let pathToUse: string;
     if (!path) {
       // get next usable path for this key
@@ -156,7 +179,7 @@ export class BAP {
     const newIdentity = new MasterID(
       this.#HDPrivateKey,
       identityAttributes,
-      idSeed,
+      idSeed
     );
     newIdentity.BAP_SERVER = this.#BAP_SERVER;
     newIdentity.BAP_TOKEN = this.#BAP_TOKEN;
@@ -234,7 +257,7 @@ export class BAP {
       this.importEncryptedIds(idData);
       return;
     }
-    const identity = idData as Identities
+    const identity = idData as Identities;
     if (!identity.lastIdPath) {
       throw new Error("ID cannot be imported as it is not complete");
     }
@@ -268,25 +291,21 @@ export class BAP {
     const decrypted = this.decrypt(idData);
     const ids = JSON.parse(decrypted) as Identities;
 
-    const isOldFormat = Array.isArray(ids)
+    const isOldFormat = Array.isArray(ids);
     if (isOldFormat) {
-      console.log("Importing old format:\n", ids)
-      this.importOldIds(ids)
-      return
+      console.log("Importing old format:\n", ids);
+      this.importOldIds(ids);
+      return;
     }
     if (typeof ids !== "object") {
-      throw new Error("decrypted, but found unrecognized identities format")
+      throw new Error("decrypted, but found unrecognized identities format");
     }
     this.importIds(ids, false);
   }
 
   importOldIds(idData: OldIdentity[]): void {
     for (const id of idData) {
-      const importId = new MasterID(
-        this.#HDPrivateKey,
-        {},
-        id.idSeed ?? ""
-      );
+      const importId = new MasterID(this.#HDPrivateKey, {}, id.idSeed ?? "");
       importId.BAP_SERVER = this.#BAP_SERVER;
       importId.BAP_TOKEN = this.#BAP_TOKEN;
       importId.import(id);
@@ -296,7 +315,6 @@ export class BAP {
       this.#lastIdPath = importId.currentPath;
     }
   }
-
 
   /**
    * Export identities. If no idKeys are provided, exports all identities.
@@ -327,7 +345,6 @@ export class BAP {
     return idData;
   }
 
-
   /**
    * Export a given ID from this instance for external storage
    *
@@ -352,7 +369,7 @@ export class BAP {
       return this.encrypt(JSON.stringify(idData));
     }
 
-    return idData
+    return idData;
   }
 
   /**
@@ -365,7 +382,7 @@ export class BAP {
     const derivedChild = this.#HDPrivateKey.derive(ENCRYPTION_PATH);
     return toBase64(
       // @ts-ignore - you can remove the null when this is merged https://github.com/bitcoin-sv/ts-sdk/pull/123
-      electrumEncrypt(toArray(string), derivedChild.pubKey, null),
+      electrumEncrypt(toArray(string), derivedChild.pubKey, null)
     );
   }
 
@@ -378,7 +395,7 @@ export class BAP {
   decrypt(string: string): string {
     const derivedChild = this.#HDPrivateKey.derive(ENCRYPTION_PATH);
     return toUTF8(
-      electrumDecrypt(toArray(string, "base64"), derivedChild.privKey),
+      electrumDecrypt(toArray(string, "base64"), derivedChild.privKey)
     );
   }
 
@@ -395,7 +412,7 @@ export class BAP {
     attestationHash: string,
     identityKey: string,
     counter = 0,
-    dataString = "",
+    dataString = ""
   ) {
     const id = this.getId(identityKey);
     if (!id) {
@@ -405,7 +422,7 @@ export class BAP {
     const attestationBuffer = this.getAttestationBuffer(
       attestationHash,
       counter,
-      dataString,
+      dataString
     );
     const { address, signature } = id.signMessage(attestationBuffer);
 
@@ -414,7 +431,7 @@ export class BAP {
       counter,
       address,
       signature,
-      dataString,
+      dataString
     );
   }
 
@@ -455,13 +472,12 @@ export class BAP {
       signature: toBase64(tx[9 + dataOffset]),
     };
 
-    
     if (dataOffset && tx[3] === tx[8]) {
       // valid data addition
       attestation.data = toHex(tx[9]);
     }
 
-    console.log({attestation})
+    console.log({ attestation });
 
     try {
       const signatureBufferStatements: number[][] = [];
@@ -472,7 +488,7 @@ export class BAP {
       attestation.verified = this.verifySignature(
         signatureBufferStatements.flat(),
         attestation.signingAddress,
-        attestation.signature,
+        attestation.signature
       );
     } catch (e) {
       attestation.verified = false;
@@ -496,7 +512,7 @@ export class BAP {
     counter: number,
     address: string,
     signature: string,
-    dataString = "",
+    dataString = ""
   ): number[][] {
     const elements: number[][] = [
       [OP.OP_RETURN],
@@ -514,7 +530,7 @@ export class BAP {
         toArray("DATA"),
         toArray(attestationHash),
         toArray(dataString),
-        toArray("|"),
+        toArray("|")
       );
     }
 
@@ -522,10 +538,10 @@ export class BAP {
       toArray(AIP_BITCOM_ADDRESS),
       toArray("BITCOIN_ECDSA"),
       toArray(address),
-      toArray(signature, "base64"),
+      toArray(signature, "base64")
     );
 
-    console.log({elements})
+    console.log({ elements });
     return elements;
   }
 
@@ -540,7 +556,7 @@ export class BAP {
   getAttestationBuffer(
     attestationHash: string,
     counter = 0,
-    dataString = "",
+    dataString = ""
   ): number[] {
     // re-create how AIP creates the buffer to sign
     const elements = [
@@ -558,7 +574,7 @@ export class BAP {
         toArray("DATA"),
         toArray(attestationHash),
         toArray(dataString),
-        toArray("|"),
+        toArray("|")
       );
     }
 
@@ -577,7 +593,7 @@ export class BAP {
   verifySignature(
     message: string | number[],
     address: string,
-    signature: string,
+    signature: string
   ): boolean {
     // Convert message to number[]
     let msg: number[];
@@ -591,12 +607,12 @@ export class BAP {
 
     const sig = Signature.fromCompact(signature, "base64");
     let publicKey: PublicKey | undefined;
-    
+
     for (let recovery = 0; recovery < 4; recovery++) {
       try {
         publicKey = sig.RecoverPublicKey(
           recovery,
-          new BigNumber(BSM.magicHash(msg)),
+          new BigNumber(BSM.magicHash(msg))
         );
         const sigFitsPubkey = BSM.verify(msg, sig, publicKey);
         if (sigFitsPubkey && publicKey.toAddress() === address) {
@@ -624,31 +640,38 @@ export class BAP {
     idKey: string,
     address: string,
     challenge: string,
-    signature: string,
+    signature: string
   ): Promise<boolean> {
     // first we test locally before sending to server
-    const localVerification = this.verifySignature(challenge, address, signature);
+    const localVerification = this.verifySignature(
+      challenge,
+      address,
+      signature
+    );
 
     if (!localVerification) {
       return false;
     }
 
     try {
-      const response = await this.getApiData<AttestationValidResponse>("/attestation/valid", {
-        idKey,
-        address,
-        challenge,
-        signature,
-      });
+      const response = await this.getApiData<AttestationValidResponse>(
+        "/attestation/valid",
+        {
+          idKey,
+          address,
+          challenge,
+          signature,
+        }
+      );
 
       // Ensure we have a valid response with the expected structure
-      if (response?.status === 'success' && response?.result?.valid === true) {
+      if (response?.status === "success" && response?.result?.valid === true) {
         return true;
       }
 
       return false;
     } catch (error) {
-      console.error('API call failed:', error);
+      console.error("API call failed:", error);
       return false;
     }
   }
@@ -660,7 +683,9 @@ export class BAP {
    * @param tx
    * @returns {Promise<boolean|*>}
    */
-  async isValidAttestationTransaction(tx: number[][]): Promise<AttestationValidResponse | false> {
+  async isValidAttestationTransaction(
+    tx: number[][]
+  ): Promise<AttestationValidResponse | false> {
     if (this.verifyAttestationWithAIP(tx)) {
       return this.getApiData<AttestationValidResponse>("/attestation/valid", {
         tx,
@@ -675,10 +700,15 @@ export class BAP {
    * @param address
    * @returns {Promise<*>}
    */
-  async getIdentityFromAddress(address: string): Promise<GetIdentityByAddressResponse> {
-    return this.getApiData<GetIdentityByAddressResponse>("/identity/from-address", {
-      address,
-    });
+  async getIdentityFromAddress(
+    address: string
+  ): Promise<GetIdentityByAddressResponse> {
+    return this.getApiData<GetIdentityByAddressResponse>(
+      "/identity/from-address",
+      {
+        address,
+      }
+    );
   }
 
   /**
@@ -698,16 +728,80 @@ export class BAP {
    *
    * @param attestationHash
    */
-  async getAttestationsForHash(attestationHash: string): Promise<GetAttestationResponse> {
+  async getAttestationsForHash(
+    attestationHash: string
+  ): Promise<GetAttestationResponse> {
     // get all BAP ATTEST records for the given attestationHash
     return this.getApiData<GetAttestationResponse>("/attestations", {
       hash: attestationHash,
     });
   }
 
+  /**
+   * Export master BAP data in bitcoin-backup compatible format
+   * @param label Optional user-defined label
+   * @param xprv Extended private key (if not provided, the HDPrivateKey will be used)
+   * @param mnemonic BIP39 mnemonic phrase (optional)
+   * @returns BapMasterBackup compatible object
+   */
+  exportForBackup(
+    label?: string,
+    xprv?: string,
+    mnemonic?: string
+  ): {
+    ids: string;
+    xprv: string;
+    mnemonic: string;
+    label?: string;
+    createdAt: string;
+  } {
+    const ids = this.exportIds(); // This returns encrypted string by default
+    return {
+      ids,
+      xprv: xprv || this.#HDPrivateKey.toString(),
+      mnemonic: mnemonic || "",
+      ...(label && { label }),
+      createdAt: new Date().toISOString(),
+    };
+  }
 
-};
+  /**
+   * Export a specific member ID in bitcoin-backup compatible format
+   * @param idKey The key of the identity to export
+   * @param label Optional user-defined label
+   * @returns BapMemberBackup compatible object
+   */
+  exportMemberForBackup(
+    idKey: string,
+    label?: string
+  ): {
+    wif: string;
+    id: string;
+    label?: string;
+    createdAt: string;
+  } {
+    const memberID = this.#ids[idKey];
+    if (!memberID) {
+      throw new Error(`Identity ${idKey} not found`);
+    }
+
+    // Get the member export and derive the WIF
+    const memberExport = memberID.exportMember();
+
+    return {
+      wif: memberExport.wif,
+      id: memberExport.encryptedData,
+      ...(label && { label }),
+      createdAt: new Date().toISOString(),
+    };
+  }
+}
 
 export { MasterID, MemberID };
-export type { Attestation, Identity, MemberIdentity, IdentityAttributes, PathPrefix };
-
+export type {
+  Attestation,
+  Identity,
+  MemberIdentity,
+  IdentityAttributes,
+  PathPrefix,
+};

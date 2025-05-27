@@ -1,4 +1,3 @@
-// https://schema.org/Person
 {
   "name": {
     "type": "string",
