@@ -1,14 +1,40 @@
-import { randomBytes } from "node:crypto";
 import type { PathPrefix } from "./interface.js";
 
 export const Utils = {
   /**
-   * Helper function to generate a random nonce
+   * Helper function to generate cryptographically secure random bytes
+   * 
+   * This follows the pattern used by BSV SDK and other Bitcoin libraries.
+   * Uses crypto.getRandomValues() which is available in browsers and modern Node.js.
    *
-   * @returns {string}
+   * @param {number} byteLength - Number of random bytes to generate (default: 32)
+   * @returns {Uint8Array} Array of cryptographically secure random bytes
    */
-  getRandomString(length = 32) {
-    return randomBytes(length).toString("hex");
+  getRandomBytes(byteLength = 32): Uint8Array {
+    // Use crypto.getRandomValues() - available in browsers and Node.js 15+
+    if (typeof globalThis !== 'undefined' && globalThis.crypto && globalThis.crypto.getRandomValues) {
+      const array = new Uint8Array(byteLength);
+      globalThis.crypto.getRandomValues(array);
+      return array;
+    }
+
+    // Fallback error - crypto operations require secure randomness
+    throw new Error(
+      'Secure random number generation not available. ' +
+      'crypto.getRandomValues() is required for cryptographic operations. ' +
+      'This environment may not be suitable for secure key generation.'
+    );
+  },
+
+  /**
+   * Helper function to generate a random hex string
+   *
+   * @param {number} byteLength - Number of random bytes to generate (default: 32)
+   * @returns {string} Hex string of random bytes
+   */
+  getRandomString(byteLength = 32): string {
+    const bytes = this.getRandomBytes(byteLength);
+    return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
   },
 
   /**
