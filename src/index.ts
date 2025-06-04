@@ -6,6 +6,7 @@ import {
   OP,
   type PublicKey,
   Signature,
+  PrivateKey,
 } from "@bsv/sdk";
 
 import { Utils as BSVUtils } from "@bsv/sdk";
@@ -39,26 +40,48 @@ const { electrumEncrypt, electrumDecrypt } = ECIES;
 
 type Identities = { lastIdPath: string; ids: Identity[] };
 
+// Type 42 parameters
+interface Type42Params {
+  rootPk: string;  // WIF format private key
+}
+
 /**
  * BAP class
  *
  * Creates an instance of the BAP class and uses the given HDPrivateKey for all BAP operations.
+ * Supports both BIP32 (HD) and Type 42 key derivation methods.
  *
- * @param HDPrivateKey
+ * @deprecated When initializing with a string (xprv), the BIP32 format is used which is deprecated 
+ * for new implementations. Use Type 42 initialization with { rootPk: wifKey } instead.
+ * 
+ * @param keySource Either an HDPrivateKey string (xprv) for BIP32 or Type42Params for Type 42
  */
 export class BAP {
-  #HDPrivateKey;
+  #HDPrivateKey: HD | undefined;
+  #masterPrivateKey: PrivateKey | undefined;
+  #isType42: boolean;
   #ids: { [key: string]: MasterID } = {};
   #BAP_SERVER = BAP_SERVER;
   #BAP_TOKEN = "";
   #lastIdPath = "";
+  #identityCounter = 0;
   getApiData: APIFetcher;
 
-  constructor(HDPrivateKey: string, token = "", server = "") {
-    if (!HDPrivateKey) {
-      throw new Error("No HDPrivateKey given");
+  constructor(keySource: string | Type42Params, token = "", server = "") {
+    if (!keySource) {
+      throw new Error("No key source given");
     }
-    this.#HDPrivateKey = HD.fromString(HDPrivateKey);
+
+    // Determine if we're using Type 42 or BIP32
+    if (typeof keySource === "string") {
+      // BIP32 mode
+      this.#HDPrivateKey = HD.fromString(keySource);
+      this.#isType42 = false;
+    } else {
+      // Type 42 mode
+      this.#masterPrivateKey = PrivateKey.fromWif(keySource.rootPk);
+      this.#isType42 = true;
+    }
 
     if (token) {
       this.#BAP_TOKEN = token;
@@ -78,28 +101,45 @@ export class BAP {
   /**
    * Get the public key of the given childPath, or of the current HDPrivateKey of childPath is empty
    *
-   * @param childPath Full derivation path for this child
+   * @param childPath Full derivation path for this child (BIP32) or invoice number (Type 42)
    * @returns {*}
    */
   getPublicKey(childPath = ""): string {
+    if (this.#isType42) {
+      if (!this.#masterPrivateKey) throw new Error("Master private key not initialized");
+      if (childPath) {
+        // In Type 42, we use the path as an invoice number
+        const derivedKey = this.#masterPrivateKey.deriveChild(
+          this.#masterPrivateKey.toPublicKey(),
+          childPath
+        );
+        return derivedKey.toPublicKey().toString();
+      }
+      return this.#masterPrivateKey.toPublicKey().toString();
+    }
+    
+    if (!this.#HDPrivateKey) throw new Error("HD private key not initialized");
     if (childPath) {
       return this.#HDPrivateKey.derive(childPath).pubKey.toString();
     }
-
     return this.#HDPrivateKey.pubKey.toString();
   }
 
   /**
-   * Get the public key of the given childPath, or of the current HDPrivateKey of childPath is empty
+   * Get the HD public key of the given childPath (BIP32 only)
    *
    * @param childPath Full derivation path for this child
    * @returns {*}
    */
   getHdPublicKey(childPath = ""): string {
+    if (this.#isType42) {
+      throw new Error("HD public keys are not available in Type 42 mode");
+    }
+    
+    if (!this.#HDPrivateKey) throw new Error("HD private key not initialized");
     if (childPath) {
       return this.#HDPrivateKey.derive(childPath).toPublic().toString();
     }
-
     return this.#HDPrivateKey.toPublic().toString();
   }
 
@@ -133,8 +173,22 @@ export class BAP {
    * @param bapId MasterID instance
    */
   checkIdBelongs(bapId: MasterID): boolean {
-    const derivedChild = this.#HDPrivateKey.derive(bapId.rootPath);
-    const checkRootAddress = derivedChild.pubKey.toAddress();
+    let checkRootAddress: string;
+    
+    if (this.#isType42) {
+      if (!this.#masterPrivateKey) throw new Error("Master private key not initialized");
+      // In Type 42, we derive using the path as invoice number
+      const derivedKey = this.#masterPrivateKey.deriveChild(
+        this.#masterPrivateKey.toPublicKey(),
+        bapId.rootPath
+      );
+      checkRootAddress = derivedKey.toPublicKey().toAddress();
+    } else {
+      if (!this.#HDPrivateKey) throw new Error("HD private key not initialized");
+      const derivedChild = this.#HDPrivateKey.derive(bapId.rootPath);
+      checkRootAddress = derivedChild.pubKey.toAddress();
+    }
+    
     if (checkRootAddress !== bapId.rootAddress) {
       throw new Error("ID does not belong to this private key");
     }
@@ -154,38 +208,92 @@ export class BAP {
   /**
    * Create a new Id and link it to this BAP instance
    *
-   * This function uses the length of the #ids of this class to determine the next valid path.
-   * If not all ids related to this HDPrivateKey have been loaded, determine the path externally
-   * and pass it to newId when creating a new ID.
+   * For Type 42 mode, uses simple counter for derivation: bap:{counter}
+   * For BIP32 mode (legacy), uses traditional HD paths or provided customPath
    *
-   * @param path
-   * @param identityAttributes
-   * @param idSeed
-   * @returns {*}
+   * New signature: newId(idName, customPath?, identityAttributes?, idSeed?)
+   * Legacy signature: newId(path?, identityAttributes?, idSeed?) - for backward compatibility
+   *
+   * @param idNameOrPath The human-readable name for this identity OR legacy path parameter
+   * @param customPathOrAttributes Optional custom derivation path OR legacy identityAttributes
+   * @param identityAttributes Optional identity attributes
+   * @param idSeed Optional seed for deterministic key generation
+   * @returns {MasterID} The created identity
    */
   newId(
-    path?: string,
+    idNameOrPath?: string | IdentityAttributes,
+    customPathOrAttributes?: string | IdentityAttributes,
     identityAttributes: IdentityAttributes = {},
     idSeed = ""
   ): MasterID {
-    let pathToUse: string;
-    if (!path) {
-      // get next usable path for this key
-      pathToUse = this.getNextValidPath();
+    // Handle backward compatibility - detect old vs new signature
+    let idName: string;
+    let customPath: string | undefined;
+    let finalAttributes: IdentityAttributes;
+    
+    if (typeof idNameOrPath === 'object' || idNameOrPath === undefined || 
+        (typeof idNameOrPath === 'string' && idNameOrPath.startsWith('/'))) {
+      // Legacy signature: newId(path?, identityAttributes?, idSeed?)
+      // First param is path (undefined, starts with '/') or identityAttributes (object)
+      customPath = typeof idNameOrPath === 'string' ? idNameOrPath : undefined;
+      finalAttributes = (typeof idNameOrPath === 'object' ? idNameOrPath : 
+                        typeof customPathOrAttributes === 'object' ? customPathOrAttributes : {});
+      idName = "Default Identity";
     } else {
-      pathToUse = path;
+      // New signature: newId(idName, customPath?, identityAttributes?, idSeed?)
+      idName = idNameOrPath;
+      customPath = typeof customPathOrAttributes === 'string' ? customPathOrAttributes : undefined;
+      finalAttributes = typeof customPathOrAttributes === 'object' ? customPathOrAttributes : identityAttributes;
+    }
+    let pathToUse: string;
+    
+    if (customPath) {
+      // Use provided custom path
+      pathToUse = customPath;
+    } else if (this.#isType42) {
+      // Type 42: Use simple counter for discovery - name is just UX
+      pathToUse = `bap:${this.#identityCounter}`;
+      this.#identityCounter++;
+    } else {
+      // BIP32: Use traditional HD path
+      pathToUse = this.getNextValidPath();
     }
 
-    const newIdentity = new MasterID(
-      this.#HDPrivateKey,
-      identityAttributes,
-      idSeed
-    );
+    let newIdentity: MasterID;
+    if (this.#isType42) {
+      if (!this.#masterPrivateKey) {
+        throw new Error("Type 42 parameters not initialized");
+      }
+      // For Type 42, pass the key source object
+      newIdentity = new MasterID(
+        {
+          rootPk: this.#masterPrivateKey
+        },
+        finalAttributes,
+        idSeed
+      );
+    } else {
+      if (!this.#HDPrivateKey) throw new Error("HD private key not initialized");
+      newIdentity = new MasterID(
+        this.#HDPrivateKey,
+        finalAttributes,
+        idSeed
+      );
+    }
+    
     newIdentity.BAP_SERVER = this.#BAP_SERVER;
     newIdentity.BAP_TOKEN = this.#BAP_TOKEN;
-
+    newIdentity.idName = idName;
     newIdentity.rootPath = pathToUse;
-    newIdentity.currentPath = Utils.getNextPath(pathToUse);
+    
+    // Set current path based on mode
+    if (this.#isType42) {
+      // For Type 42, current path is same as root path (invoice number)
+      newIdentity.currentPath = pathToUse;
+    } else {
+      // For BIP32, calculate next path
+      newIdentity.currentPath = Utils.getNextPath(pathToUse);
+    }
 
     const idKey = newIdentity.getIdentityKey();
     this.#ids[idKey] = newIdentity;
@@ -216,6 +324,26 @@ export class BAP {
     }
 
     return `/0'/${Object.keys(this.#ids).length}'/0'`;
+  }
+
+  /**
+   * Create an identity with a specific counter value (useful for discovery)
+   * Only works in Type 42 mode
+   *
+   * @param counter The specific counter value to use
+   * @param idName Optional name for the identity
+   * @returns {MasterID} The created identity
+   */
+  newIdWithCounter(
+    counter: number,
+    idName: string = `Identity ${counter}`
+  ): MasterID {
+    if (!this.#isType42) {
+      throw new Error("newIdWithCounter only works in Type 42 mode");
+    }
+    
+    const customPath = `bap:${counter}`;
+    return this.newId(idName, customPath);
   }
 
   /**
@@ -271,7 +399,24 @@ export class BAP {
       if (!id.identityKey || !id.identityAttributes || !id.rootAddress) {
         throw new Error("ID cannot be imported as it is not complete");
       }
-      const importId = new MasterID(this.#HDPrivateKey, {}, id.idSeed);
+      
+      let importId: MasterID;
+      if (this.#isType42) {
+        if (!this.#masterPrivateKey) {
+          throw new Error("Type 42 parameters not initialized");
+        }
+        importId = new MasterID(
+          {
+            rootPk: this.#masterPrivateKey
+          },
+          {},
+          id.idSeed
+        );
+      } else {
+        if (!this.#HDPrivateKey) throw new Error("HD private key not initialized");
+        importId = new MasterID(this.#HDPrivateKey, {}, id.idSeed);
+      }
+      
       importId.BAP_SERVER = this.#BAP_SERVER;
       importId.BAP_TOKEN = this.#BAP_TOKEN;
       importId.import(id);
@@ -281,6 +426,17 @@ export class BAP {
 
       this.checkIdBelongs(importId);
       this.#ids[importId.getIdentityKey()] = importId;
+      
+      // For Type 42, update identity counter based on imported paths
+      if (this.#isType42 && importId.rootPath.startsWith('bap:')) {
+        const pathParts = importId.rootPath.split(':');
+        if (pathParts.length >= 2) {
+          const counter = parseInt(pathParts[1], 10);
+          if (!isNaN(counter)) {
+            this.#identityCounter = Math.max(this.#identityCounter, counter + 1);
+          }
+        }
+      }
     }
 
     this.#lastIdPath = lastIdPath;
@@ -305,7 +461,23 @@ export class BAP {
 
   importOldIds(idData: OldIdentity[]): void {
     for (const id of idData) {
-      const importId = new MasterID(this.#HDPrivateKey, {}, id.idSeed ?? "");
+      let importId: MasterID;
+      if (this.#isType42) {
+        if (!this.#masterPrivateKey) {
+          throw new Error("Type 42 parameters not initialized");
+        }
+        importId = new MasterID(
+          {
+            rootPk: this.#masterPrivateKey
+          },
+          {},
+          id.idSeed ?? ""
+        );
+      } else {
+        if (!this.#HDPrivateKey) throw new Error("HD private key not initialized");
+        importId = new MasterID(this.#HDPrivateKey, {}, id.idSeed ?? "");
+      }
+      
       importId.BAP_SERVER = this.#BAP_SERVER;
       importId.BAP_TOKEN = this.#BAP_TOKEN;
       importId.import(id);
@@ -379,6 +551,20 @@ export class BAP {
    * @returns {string}
    */
   encrypt(string: string): string {
+    if (this.#isType42) {
+      if (!this.#masterPrivateKey) throw new Error("Master private key not initialized");
+      // For Type 42, we use the encryption path as an invoice number
+      const encryptionKey = this.#masterPrivateKey.deriveChild(
+        this.#masterPrivateKey.toPublicKey(),
+        ENCRYPTION_PATH
+      );
+      return toBase64(
+        // @ts-ignore - you can remove the null when this is merged https://github.com/bitcoin-sv/ts-sdk/pull/123
+        electrumEncrypt(toArray(string), encryptionKey.toPublicKey(), null)
+      );
+    }
+    
+    if (!this.#HDPrivateKey) throw new Error("HD private key not initialized");
     const derivedChild = this.#HDPrivateKey.derive(ENCRYPTION_PATH);
     return toBase64(
       // @ts-ignore - you can remove the null when this is merged https://github.com/bitcoin-sv/ts-sdk/pull/123
@@ -393,6 +579,19 @@ export class BAP {
    * @returns {string}
    */
   decrypt(string: string): string {
+    if (this.#isType42) {
+      if (!this.#masterPrivateKey) throw new Error("Master private key not initialized");
+      // For Type 42, we use the encryption path as an invoice number
+      const encryptionKey = this.#masterPrivateKey.deriveChild(
+        this.#masterPrivateKey.toPublicKey(),
+        ENCRYPTION_PATH
+      );
+      return toUTF8(
+        electrumDecrypt(toArray(string, "base64"), encryptionKey)
+      );
+    }
+    
+    if (!this.#HDPrivateKey) throw new Error("HD private key not initialized");
     const derivedChild = this.#HDPrivateKey.derive(ENCRYPTION_PATH);
     return toUTF8(
       electrumDecrypt(toArray(string, "base64"), derivedChild.privKey)
@@ -739,10 +938,15 @@ export class BAP {
 
   /**
    * Export master BAP data in bitcoin-backup compatible format
+   * Automatically handles both BIP32 and Type 42 modes
+   * 
+   * @deprecated BIP32 format export (when initialized with xprv) is deprecated. 
+   * Use Type 42 initialization with { rootPk: wifKey } for new implementations.
+   * 
    * @param label Optional user-defined label
-   * @param xprv Extended private key (if not provided, the HDPrivateKey will be used)
-   * @param mnemonic BIP39 mnemonic phrase (optional)
-   * @returns BapMasterBackup compatible object
+   * @param xprv Extended private key (BIP32 mode only - if not provided, the HDPrivateKey will be used)
+   * @param mnemonic BIP39 mnemonic phrase (BIP32 mode only - optional)
+   * @returns BapMasterBackup compatible object (format depends on key type)
    */
   exportForBackup(
     label?: string,
@@ -750,19 +954,38 @@ export class BAP {
     mnemonic?: string
   ): {
     ids: string;
-    xprv: string;
-    mnemonic: string;
+    xprv?: string;
+    mnemonic?: string;
+    rootPk?: string;
     label?: string;
     createdAt: string;
   } {
     const ids = this.exportIds(); // This returns encrypted string by default
-    return {
+    const baseBackup = {
       ids,
-      xprv: xprv || this.#HDPrivateKey.toString(),
-      mnemonic: mnemonic || "",
       ...(label && { label }),
       createdAt: new Date().toISOString(),
     };
+
+    if (this.#isType42) {
+      // Type 42 mode
+      if (!this.#masterPrivateKey) {
+        throw new Error("Type 42 parameters not initialized");
+      }
+      return {
+        ...baseBackup,
+        rootPk: this.#masterPrivateKey.toWif(),
+      };
+    }
+      // BIP32 mode
+      if (!this.#HDPrivateKey) {
+        throw new Error("HD private key not initialized");
+      }
+      return {
+        ...baseBackup,
+        xprv: xprv || this.#HDPrivateKey.toString(),
+        mnemonic: mnemonic || "",
+      };
   }
 
   /**
@@ -804,4 +1027,5 @@ export type {
   MemberIdentity,
   IdentityAttributes,
   PathPrefix,
+  Type42Params,
 };

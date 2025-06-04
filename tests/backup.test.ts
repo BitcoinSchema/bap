@@ -8,7 +8,7 @@ describe("bitcoin-backup export methods", () => {
   const testMnemonic =
     "legal winner thank year wave sausage worth useful legal winner thank yellow";
 
-  test("BAP exportForBackup should return bitcoin-backup compatible format", () => {
+  test("BAP exportForBackup should return bitcoin-backup compatible format for BIP32", () => {
     const bap = new BAP(testHDKey);
     const bapId = bap.newId();
     bapId.setAttribute("name", "Test User");
@@ -20,6 +20,7 @@ describe("bitcoin-backup export methods", () => {
     expect(backup).toHaveProperty("mnemonic");
     expect(backup).toHaveProperty("label");
     expect(backup).toHaveProperty("createdAt");
+    expect(backup).not.toHaveProperty("rootPk");
 
     expect(backup.xprv).toBe(testHDKey);
     expect(backup.mnemonic).toBe(testMnemonic);
@@ -79,5 +80,26 @@ describe("bitcoin-backup export methods", () => {
     expect(backup).toHaveProperty("mnemonic");
     expect(backup).toHaveProperty("createdAt");
     expect(backup).not.toHaveProperty("label");
+  });
+
+  test("BAP exportForBackup should return bitcoin-backup compatible format for Type 42", () => {
+    const testWif = "L5EZftvrYaSudiozVRzTqLcHLNDoVn7H5HSfM9BAN6tMJX8oTWz6";
+    const bap = new BAP({ rootPk: testWif });
+    const bapId = bap.newId();
+    bapId.setAttribute("name", "Test User");
+
+    const backup = bap.exportForBackup("Test Label");
+
+    expect(backup).toHaveProperty("ids");
+    expect(backup).toHaveProperty("rootPk");
+    expect(backup).toHaveProperty("label");
+    expect(backup).toHaveProperty("createdAt");
+    expect(backup).not.toHaveProperty("xprv");
+    expect(backup).not.toHaveProperty("mnemonic");
+
+    expect(backup.rootPk).toBe(testWif);
+    expect(backup.label).toBe("Test Label");
+    expect(typeof backup.ids).toBe("string"); // Should be encrypted
+    expect(backup.createdAt).toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/); // ISO date format
   });
 });
