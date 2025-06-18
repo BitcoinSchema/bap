@@ -2,7 +2,7 @@ import { describe, expect, beforeEach, test } from "bun:test";
 import { BAP } from "../src";
 import { MasterID } from "../src/MasterID";
 import { HDPrivateKey } from "./data/keys";
-import { HD, PrivateKey, Utils } from "@bsv/sdk";
+import { HD, Utils } from "@bsv/sdk";
 
 import {
   BAP_BITCOM_ADDRESS_HEX,

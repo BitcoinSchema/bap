@@ -16,7 +16,7 @@ import fullId from "./data/ids.json";
 import { HDPrivateKey, HDPublicKey } from "./data/keys";
 import oldFullId from "./data/old-ids.json";
 
-const { toArray, toHex } = Utils;
+const { toArray } = Utils;
 
 const testBAPInstance = (bap: BAP) => {
   expect(bap).toMatchObject({});

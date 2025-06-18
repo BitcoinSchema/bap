@@ -1,7 +1,7 @@
 import { describe, test, expect } from "bun:test";
-import { MasterID } from "../src/MasterID";
+
 import { MemberID } from "../src/MemberID";
-import { PrivateKey, Utils } from "@bsv/sdk";
+import { Utils } from "@bsv/sdk";
 import { BAP } from "../src";
 
 const { toArray } = Utils;
@@ -16,7 +16,10 @@ describe("Integration Test: MasterID and MemberID secure derivation flow", () =>
     const masterId = new BAP(testMasterWIF);
 
     // Derive three member ids
-    const _member1 = masterId.newId();
+    const member1 = masterId.newId();
+
+    const member1Address = member1.getCurrentAddress();
+    expect(member1Address).toBe(member1.getCurrentAddress());
     const member2 = masterId.newId();
 
     // Export backup for the second member id

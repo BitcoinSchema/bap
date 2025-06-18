@@ -1,16 +1,13 @@
 import {
   BSM,
-  Utils as BSVUtils,
   type PublicKey,
   PrivateKey,
   BigNumber,
-  Hash,
 } from "@bsv/sdk";
 import type { Signature } from "@bsv/sdk";
 import { BaseClass } from "./BaseClass";
 import type { IdentityAttributes, MemberIdentity } from "./interface";
 import { ENCRYPTION_PATH } from "./constants";
-const { toHex, toBase58, toArray } = BSVUtils;
 const { magicHash } = BSM;
 
 export class MemberID extends BaseClass {

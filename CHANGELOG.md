@@ -1,6 +1,20 @@
 # Changelog
 
 
+## [0.1.12] - 2025-06-18
+
+### Added
+- Exported all API types from root entry, so they can be imported directly from the package.
+
+### Fixed
+- Build now includes `apiTypes` definitions (`export * from './apiTypes'`).
+- Minor linter clean-ups (`Number.parseInt`, `Number.isNaN`, trivial type removal).
+
+### Chore
+- Migrated to Biome v2 configuration.
+- Lint to new standards
+
+
 ## [0.1.8] - 2025-05-06
 
 ### Fixed

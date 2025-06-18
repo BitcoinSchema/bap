@@ -16,7 +16,6 @@ import type {
   GetSigningKeysResponse,
 } from "./apiTypes";
 import {
-  AIP_BITCOM_ADDRESS,
   BAP_BITCOM_ADDRESS,
   BAP_SERVER,
   ENCRYPTION_PATH,
@@ -25,7 +24,6 @@ import {
 } from "./constants";
 import type {
   Identity,
-  IdentityAttribute,
   IdentityAttributes,
   OldIdentity,
   MemberIdentity,
@@ -511,8 +509,7 @@ class MasterID extends BaseClass {
     const pubKey = counterPartyPublicKey
       ? PublicKey.fromString(counterPartyPublicKey)
       : publicKey;
-    // @ts-ignore - remove this when SDK is updated
-    return toBase64(electrumEncrypt(toArray(stringData), pubKey, null));
+    return toBase64(electrumEncrypt(toArray(stringData), pubKey, encryptionKey));
   }
 
   /**
@@ -521,7 +518,7 @@ class MasterID extends BaseClass {
    */
   decrypt(ciphertext: string, counterPartyPublicKey?: string): string {
     const { privKey: encryptionKey } = this.getEncryptionKey();
-    let pubKey = undefined;
+    let pubKey: PublicKey | undefined;
     if (counterPartyPublicKey) {
       pubKey = PublicKey.fromString(counterPartyPublicKey);
     }
@@ -564,7 +561,7 @@ class MasterID extends BaseClass {
     counterPartyPublicKey?: string
   ): string {
     const encryptionKey = this.getEncryptionPrivateKeyWithSeed(seed);
-    let pubKey = undefined;
+    let pubKey: PublicKey | undefined;
     if (counterPartyPublicKey) {
       pubKey = PublicKey.fromString(counterPartyPublicKey);
     }

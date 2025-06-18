@@ -1,20 +1,22 @@
 {
-  "$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.0.0/schema.json",
   "files": {
-    "ignore": [
-      "dist/**",
-      "node_modules/**",
-      "*.min.js",
-      "*.bundle.js"
+    "includes": [
+      "src/**",
+      "tests/**",
+      "scripts/**",
+      "build.ts",
+      "*.json",
+      "*.md"
     ]
-  },
-  "organizeImports": {
-    "enabled": true
   },
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true
+      "recommended": true,
+      "suspicious": {
+        "noImplicitAnyLet": "warn"
+      }
     }
   },
   "formatter": {

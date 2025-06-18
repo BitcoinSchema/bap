@@ -1,6 +1,6 @@
 import { expect, test, describe } from "bun:test";
 import { BAP } from "../src/index";
-import { PrivateKey, HD } from "@bsv/sdk";
+import { HD } from "@bsv/sdk";
 
 describe("Type 42 support in BAP", () => {
   const testHDKey =
@@ -177,7 +177,7 @@ describe("Type 42 support in BAP", () => {
       
       // The identity keys will be different
       expect(idNew.getIdentityKey()).not.toBe(identityKey);
-      
+      expect(idNew.getCurrentAddress()).not.toBe(lastBIP32Address);
       // This demonstrates that migration requires creating a new identity
       // and linking it via an ID transaction from the old identity
     });

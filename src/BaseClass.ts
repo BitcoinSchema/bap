@@ -48,7 +48,7 @@ abstract class BaseClass {
    */
   decrypt(ciphertext: string, counterPartyPublicKey?: string): string {
     const { privKey } = this.getEncryptionKey();
-    let pubKey = undefined;
+    let pubKey: PublicKey | undefined;
     if (counterPartyPublicKey) {
       pubKey = PublicKey.fromString(counterPartyPublicKey);
     }

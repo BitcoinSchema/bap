@@ -336,7 +336,7 @@ export class BAP {
    */
   newIdWithCounter(
     counter: number,
-    idName: string = `Identity ${counter}`
+    idName = `Identity ${counter}`
   ): MasterID {
     if (!this.#isType42) {
       throw new Error("newIdWithCounter only works in Type 42 mode");
@@ -431,8 +431,8 @@ export class BAP {
       if (this.#isType42 && importId.rootPath.startsWith('bap:')) {
         const pathParts = importId.rootPath.split(':');
         if (pathParts.length >= 2) {
-          const counter = parseInt(pathParts[1], 10);
-          if (!isNaN(counter)) {
+          const counter = Number.parseInt(pathParts[1], 10);
+          if (!Number.isNaN(counter)) {
             this.#identityCounter = Math.max(this.#identityCounter, counter + 1);
           }
         }
@@ -689,7 +689,7 @@ export class BAP {
         attestation.signingAddress,
         attestation.signature
       );
-    } catch (e) {
+    } catch {
       attestation.verified = false;
     }
 
@@ -817,8 +817,9 @@ export class BAP {
         if (sigFitsPubkey && publicKey.toAddress() === address) {
           return true;
         }
-      } catch (e) {
+      } catch {
         // try next recovery
+        
       }
     }
     return false;
@@ -1029,3 +1030,4 @@ export type {
   PathPrefix,
   Type42Params,
 };
+export * from "./apiTypes";

@@ -27,16 +27,6 @@ export interface Attestation {
   signers: Signer[];
 }
 
-export interface SigningKey {
-  idKey: string;
-  signingAddress: string;
-  sequence: number;
-  block: number;
-  txId: string;
-  timestamp: number;
-  revoked: boolean;
-}
-
 export type GetSigningKeysResponse = APIResponse<Signer[]>;
 
 // Identity types

@@ -16,9 +16,7 @@ describe("test-vectors", () => {
       const tx = id.getInitialIdTransaction();
       expect(typeof tx[8]).toBe("object");
       expect(typeof v.tx[8]).toBe("string");
-      // biome-ignore lint/performance/noDelete: <explanation>
       delete tx[8]; // remove the signature, will be different
-      // biome-ignore lint/performance/noDelete: <explanation>
       delete v.tx[8]; // remove the signature, will be different
       expect(tx).toStrictEqual(v.tx.map((t) => toArray(t, "hex")));
     }
