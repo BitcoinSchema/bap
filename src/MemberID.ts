@@ -1,14 +1,19 @@
 import {
   BSM,
-  type PublicKey,
+  PublicKey,
   PrivateKey,
   BigNumber,
+  Hash,
+  Utils as BSVUtils,
+  ECIES,
 } from "@bsv/sdk";
 import type { Signature } from "@bsv/sdk";
 import { BaseClass } from "./BaseClass";
 import type { IdentityAttributes, MemberIdentity } from "./interface";
 import { ENCRYPTION_PATH } from "./constants";
 const { magicHash } = BSM;
+const { toArray, toUTF8, toBase64, toHex } = BSVUtils;
+const { electrumDecrypt, electrumEncrypt } = ECIES;
 
 export class MemberID extends BaseClass {
   private key: PrivateKey;
@@ -117,6 +122,74 @@ export class MemberID extends BaseClass {
   getEncryptionPublicKey(): string {
     const { pubKey } = this.getEncryptionKey();
     return pubKey.toString();
+  }
+
+  /**
+   * Get a derived encryption key using a seed string (Type42 derivation)
+   * This allows deriving unique encryption keys per friend/conversation
+   * @param seed - The seed string (e.g., friend's BAP ID)
+   * @returns The derived private key for this seed
+   */
+  private getEncryptionPrivateKeyWithSeed(seed: string): PrivateKey {
+    // Hash the seed to get a deterministic value
+    const seedHash = toHex(Hash.sha256(seed, "utf8"));
+    // Use Type42 derivation: deriveChild(publicKey, invoice)
+    return this.key.deriveChild(this.key.toPublicKey(), seedHash);
+  }
+
+  /**
+   * Get the encryption key pair for a specific seed
+   * @param seed - The seed string (e.g., friend's BAP ID)
+   */
+  getEncryptionKeyWithSeed(seed: string): { privKey: PrivateKey; pubKey: PublicKey } {
+    const privKey = this.getEncryptionPrivateKeyWithSeed(seed);
+    return {
+      privKey,
+      pubKey: privKey.toPublicKey(),
+    };
+  }
+
+  /**
+   * Get the public key for encrypting data for a specific seed
+   * This is the public key to include in friend requests
+   * @param seed - The seed string (e.g., friend's BAP ID)
+   */
+  getEncryptionPublicKeyWithSeed(seed: string): string {
+    return this.getEncryptionPrivateKeyWithSeed(seed).toPublicKey().toString();
+  }
+
+  /**
+   * Encrypt data using a seed-derived key
+   * @param stringData - The data to encrypt
+   * @param seed - The seed string for key derivation (e.g., friend's BAP ID)
+   * @param counterPartyPublicKey - Optional public key of the recipient
+   * @returns Base64 encoded encrypted data
+   */
+  encryptWithSeed(stringData: string, seed: string, counterPartyPublicKey?: string): string {
+    const derivedKey = this.getEncryptionPrivateKeyWithSeed(seed);
+    const pubKey = derivedKey.toPublicKey();
+    // Import PublicKey type-safely - counterPartyPublicKey is already a hex pubkey string
+    const PublicKeyClass = this.key.toPublicKey().constructor as typeof import("@bsv/sdk").PublicKey;
+    const targetPubKey = counterPartyPublicKey
+      ? PublicKeyClass.fromString(counterPartyPublicKey)
+      : pubKey;
+    return toBase64(electrumEncrypt(toArray(stringData), targetPubKey, derivedKey));
+  }
+
+  /**
+   * Decrypt data using a seed-derived key
+   * @param ciphertext - Base64 encoded encrypted data
+   * @param seed - The seed string for key derivation (e.g., friend's BAP ID)
+   * @param counterPartyPublicKey - Optional public key of the sender
+   * @returns Decrypted string
+   */
+  decryptWithSeed(ciphertext: string, seed: string, counterPartyPublicKey?: string): string {
+    const derivedKey = this.getEncryptionPrivateKeyWithSeed(seed);
+    let senderPubKey: PublicKey | undefined;
+    if (counterPartyPublicKey) {
+      senderPubKey = PublicKey.fromString(counterPartyPublicKey);
+    }
+    return toUTF8(electrumDecrypt(toArray(ciphertext, "base64"), derivedKey, senderPubKey));
   }
 
   /**
