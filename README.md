@@ -85,9 +85,24 @@ OP_RETURN
 
 Each identity possesses distinct keys for different operations:
 
-- **Signing Key**: Transaction authorization and message signing
+- **Member Key**: The root key for each identity path, used for key derivation
+- **Signing Key**: Derived from member key for transaction authorization and message signing
 - **Encryption Key**: ECIES encryption for private data exchange
 - **Derivation Path**: Hierarchical key generation for sub-identities
+
+### Key Derivation Hierarchy
+
+BAP uses a two-level key derivation for signing operations:
+
+```
+Root Key (HD or Type42 master)
+    ↓ path derivation
+Member Key (identity root at path)
+    ↓ deriveChild(publicKey, "1-bap-identity")
+Signing Key (used for on-chain operations)
+```
+
+This structure ensures compatibility with BRC-100 wallet tooling while maintaining BAP's identity management features. The member key serves as the BRC-100 identity root, and the signing key is deterministically derived for on-chain operations.
 
 ## Implementation
 
@@ -139,6 +154,25 @@ async function discoverIdentities(bap, checkExistsOnChain) {
   
   return found;
 }
+```
+
+### Migration from Legacy Derivation
+
+Existing identities using the previous (pre-signing-key-derivation) format can be migrated:
+
+```javascript
+// Check if identity needs migration
+if (identity.needsRotation(registeredOnChainAddress)) {
+  // Get the rotation transaction OP_RETURN
+  const opReturn = identity.getLegacyRotationTransaction();
+
+  // App handles funding and broadcasting the transaction
+  // This rotates from legacy address to new derived signing address
+}
+
+// Utility methods for migration
+const legacyAddress = identity.getLegacyAddress();  // Pre-derivation address
+const newAddress = identity.getCurrentAddress();     // New derived address
 ```
 
 ### Deprecation Notice

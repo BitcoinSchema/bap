@@ -55,11 +55,17 @@ describe("MemberID Backup and Import", () => {
     expect(result.signature.length).toBeGreaterThan(0);
   });
 
-  test("MemberID getPublicKey returns correct public key", () => {
+  test("MemberID getPublicKey returns derived signing key public key", () => {
     const privateKey = PrivateKey.fromWif(testWIF);
     const member = new MemberID(privateKey);
-    const expectedPublicKey = privateKey.toPublicKey().toString();
-    expect(member.getPublicKey()).toBe(expectedPublicKey);
+    // getPublicKey returns the derived identity signing key's public key
+    // which is different from the member key's public key
+    const memberPubKey = privateKey.toPublicKey().toString();
+    const derivedPubKey = member.getPublicKey();
+    // They should be different (signing key is derived one more level)
+    expect(derivedPubKey).not.toBe(memberPubKey);
+    // getMemberKey returns the member key's public key (root for derivation)
+    expect(member.getMemberKey()).toBe(memberPubKey);
   });
 
   test("MemberID import/export consistency", () => {

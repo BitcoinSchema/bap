@@ -1,14 +1,11 @@
 import {
-  BSM,
   Utils as BSVUtils,
   ECIES,
   Hash,
   PublicKey,
   type PrivateKey,
-  BigNumber,
   HD,
 } from "@bsv/sdk";
-import type { Signature } from "@bsv/sdk";
 
 import { type APIFetcher, apiFetcher } from "./api";
 import type {
@@ -21,6 +18,7 @@ import {
   ENCRYPTION_PATH,
   MAX_INT,
   SIGNING_PATH_PREFIX,
+  BAP_INVOICE_NUMBER,
 } from "./constants";
 import type {
   Identity,
@@ -33,7 +31,6 @@ import { MemberID } from "./MemberID";
 import { BaseClass } from "./BaseClass";
 const { toArray, toHex, toBase58, toUTF8, toBase64 } = BSVUtils;
 const { electrumDecrypt, electrumEncrypt } = ECIES;
-const { magicHash } = BSM;
 
 // Type 42 key source
 interface Type42KeySource {
@@ -402,24 +399,97 @@ class MasterID extends BaseClass {
   }
 
   /**
+   * Get the private key for a given path (before identity signing key derivation)
+   * This is the "member key" for the path
+   */
+  private getPathDerivedKey(path: string): PrivateKey {
+    if (this.#isType42) {
+      if (!this.#masterPrivateKey) throw new Error("Master private key not initialized");
+      return this.#masterPrivateKey.deriveChild(
+        this.#masterPrivateKey.toPublicKey(),
+        path
+      );
+    }
+    if (!this.#HDPrivateKey) throw new Error("HD private key not initialized");
+    return this.#HDPrivateKey.derive(path).privKey;
+  }
+
+  /**
+   * Get the identity signing key for a given path
+   * This is derived from the path key using the BAP protocol pattern
+   */
+  private getIdentitySigningKeyForPath(path: string): PrivateKey {
+    const pathKey = this.getPathDerivedKey(path);
+    return pathKey.deriveChild(pathKey.toPublicKey(), BAP_INVOICE_NUMBER);
+  }
+
+  /**
+   * Get the member key's public key for the given path
+   * This is the root key before signing key derivation
+   */
+  public getMemberKey(path?: string): string {
+    const pathToUse = path || this.#currentPath;
+    return this.getPathDerivedKey(pathToUse).toPublicKey().toString();
+  }
+
+  /**
+   * Get the legacy (pre-signing-key-derivation) address for a path
+   * This is the address without the extra "1-bap-identity" derivation
+   */
+  public getLegacyAddress(path?: string): string {
+    const pathToUse = path || this.#currentPath;
+    const pathKey = this.getPathDerivedKey(pathToUse);
+    return pathKey.toPublicKey().toAddress();
+  }
+
+  /**
+   * Check if the on-chain signing address uses legacy derivation
+   * @param registeredAddress The address registered on-chain (optional, defaults to rootAddress)
+   * @returns true if the registered address matches legacy derivation
+   */
+  public needsRotation(registeredAddress?: string): boolean {
+    const addressToCheck = registeredAddress || this.rootAddress;
+    const legacyAddress = this.getLegacyAddress(this.#rootPath);
+    return addressToCheck === legacyAddress;
+  }
+
+  /**
+   * Get OP_RETURN for migrating from legacy to new signing address derivation
+   * Signs with the LEGACY key to prove ownership of the old address
+   * Caller handles funding and broadcast
+   * @returns OP_RETURN data as number[][]
+   */
+  public getLegacyRotationTransaction(): number[][] {
+    // New address is the derived address at root path
+    const newAddress = this.getAddress(this.#rootPath);
+
+    const opReturn = [
+      toArray(BAP_BITCOM_ADDRESS),
+      toArray("ID"),
+      toArray(this.identityKey),
+      toArray(newAddress),
+    ];
+
+    // Must sign with LEGACY key (not the new derived key)
+    // to prove ownership of the old legacy address
+    const aipMessageBuffer = this.getAIPMessageBuffer(opReturn);
+    const legacyKey = this.getPathDerivedKey(this.#rootPath);
+    const { address, signature } = this.signWithBSM(aipMessageBuffer.flat(), legacyKey);
+
+    return this.formatAIPOutput(opReturn, address, signature);
+  }
+
+  /**
    * Get address for given path
+   * Returns the identity signing address (derived from member key)
    *
    * @param path
    * @returns {*}
    */
   getAddress(path: string): string {
-    if (this.#isType42) {
-      if (!this.#masterPrivateKey) throw new Error("Master private key not initialized");
-      // In Type 42, use path as invoice number
-      const derivedKey = this.#masterPrivateKey.deriveChild(
-        this.#masterPrivateKey.toPublicKey(),
-        path
-      );
-      return derivedKey.toPublicKey().toAddress();
-    }
-      if (!this.#HDPrivateKey) throw new Error("HD private key not initialized");
-      const derivedChild = this.#HDPrivateKey.derive(path);
-      return derivedChild.privKey.toPublicKey().toAddress();
+    // Get the identity signing key and return its address
+    const identitySigningKey = this.getIdentitySigningKeyForPath(path);
+    return identitySigningKey.toPublicKey().toAddress();
   }
 
   /**
@@ -618,6 +688,7 @@ class MasterID extends BaseClass {
 
   /**
    * Sign a message with the current signing address of this identity
+   * Uses the derived identity signing key
    *
    * @param message
    * @param signingPath
@@ -628,31 +699,8 @@ class MasterID extends BaseClass {
     signingPath?: string
   ): { address: string; signature: string } {
     const pathToUse = signingPath || this.#currentPath;
-    let childPk: PrivateKey;
-    
-    if (this.#isType42) {
-      if (!this.#masterPrivateKey) throw new Error("Master private key not initialized");
-      // In Type 42, use path as invoice number
-      childPk = this.#masterPrivateKey.deriveChild(
-        this.#masterPrivateKey.toPublicKey(),
-        pathToUse
-      );
-    } else {
-      if (!this.#HDPrivateKey) throw new Error("HD private key not initialized");
-      childPk = this.#HDPrivateKey.derive(pathToUse).privKey;
-    }
-    
-    const address = childPk.toAddress();
-
-    // Needed to calculate the recovery factor
-    const dummySig = BSM.sign(message, childPk, "raw") as Signature;
-    const h = new BigNumber(magicHash(message));
-    const r = dummySig.CalculateRecoveryFactor(childPk.toPublicKey(), h);
-    const signature = (
-      BSM.sign(message, childPk, "raw") as Signature
-    ).toCompact(r, true, "base64") as string;
-
-    return { address, signature };
+    const signingKey = this.getIdentitySigningKeyForPath(pathToUse);
+    return this.signWithBSM(message, signingKey);
   }
 
   /**
@@ -663,6 +711,7 @@ class MasterID extends BaseClass {
    * are rotated for this ID.
    *
    * This is used in for instance deterministic login systems, that do not support BAP.
+   * The signing address is derived from the seed-derived key.
    *
    * @param message
    * @param seed {string} String seed that will be used to generate a path
@@ -672,8 +721,8 @@ class MasterID extends BaseClass {
     seed: string
   ): { address: string; signature: string } {
     const pathHex = toHex(Hash.sha256(seed, "utf8"));
-    let derivedKey: PrivateKey;
-    
+    let seedDerivedKey: PrivateKey;
+
     if (this.#isType42) {
       if (!this.#masterPrivateKey) throw new Error("Master private key not initialized");
       // First derive to root path
@@ -682,27 +731,22 @@ class MasterID extends BaseClass {
         this.#rootPath
       );
       // Then derive with seed hex as invoice number
-      derivedKey = rootKey.deriveChild(rootKey.toPublicKey(), pathHex);
+      seedDerivedKey = rootKey.deriveChild(rootKey.toPublicKey(), pathHex);
     } else {
       if (!this.#HDPrivateKey) throw new Error("HD private key not initialized");
       const path = Utils.getSigningPathFromHex(pathHex);
       const HDPrivateKey = this.#HDPrivateKey.derive(this.#rootPath);
       const derivedChild = HDPrivateKey.derive(path);
-      derivedKey = derivedChild.privKey;
+      seedDerivedKey = derivedChild.privKey;
     }
-    
-    const address = derivedKey.toPublicKey().toAddress();
-    const messageArray = toArray(message, "utf8");
-    
-    const dummySig = BSM.sign(messageArray, derivedKey, "raw") as Signature;
-    const h = new BigNumber(magicHash(messageArray));
-    const r = dummySig.CalculateRecoveryFactor(derivedKey.toPublicKey(), h);
 
-    const signature = (
-      BSM.sign(messageArray, derivedKey, "raw") as Signature
-    ).toCompact(r, true, "base64") as string;
+    // Apply identity signing key derivation to the seed-derived key
+    const signingKey = seedDerivedKey.deriveChild(
+      seedDerivedKey.toPublicKey(),
+      BAP_INVOICE_NUMBER
+    );
 
-    return { address, signature };
+    return this.signWithBSM(toArray(message, "utf8"), signingKey);
   }
 
   /**
@@ -795,48 +839,35 @@ class MasterID extends BaseClass {
     };
   }
 
-  // New method to export a member-friendly backup, containing only the derived signing key
+  // Export a member-friendly backup, containing only the derived member key
+  // The derivedPrivateKey is the member key (root for signing key derivation)
+  // The address is the derived identity signing address
   exportMemberBackup(): MemberIdentity {
-    let derivedKey: PrivateKey;
-    
-    if (this.#isType42) {
-      if (!this.#masterPrivateKey) throw new Error("Master private key not initialized");
-      derivedKey = this.#masterPrivateKey.deriveChild(
-        this.#masterPrivateKey.toPublicKey(),
-        this.#currentPath
-      );
-    } else {
-      if (!this.#HDPrivateKey) throw new Error("HD private key not initialized");
-      derivedKey = this.#HDPrivateKey.derive(this.#currentPath).privKey;
-    }
-    
+    // Get the path-derived key (member key)
+    const derivedKey = this.getPathDerivedKey(this.#currentPath);
+    // Get the derived identity signing key for the address
+    const identitySigningKey = this.getIdentitySigningKeyForPath(this.#currentPath);
+
     return {
       name: this.idName,
       description: this.description,
       derivedPrivateKey: derivedKey.toWif(),
-      address: derivedKey.toPublicKey().toAddress(),
+      address: identitySigningKey.toPublicKey().toAddress(),
       identityAttributes: this.getAttributes(),
       identityKey: this.identityKey,
     };
   }
 
-  // New method to derive a new member ID from the master HD key
+  // Derive a new member ID from the master HD key
+  // The path-derived key becomes the MemberID's key (member root)
+  // MemberID handles signing key derivation internally
   public newId(): MemberID {
     // Assuming incrementPath updates the internal current path
     this.incrementPath();
-    
-    let derivedKey: PrivateKey;
-    if (this.#isType42) {
-      if (!this.#masterPrivateKey) throw new Error("Master private key not initialized");
-      derivedKey = this.#masterPrivateKey.deriveChild(
-        this.#masterPrivateKey.toPublicKey(),
-        this.#currentPath
-      );
-    } else {
-      if (!this.#HDPrivateKey) throw new Error("HD private key not initialized");
-      derivedKey = this.#HDPrivateKey.derive(this.#currentPath).privKey;
-    }
-    
+
+    // Get the path-derived key (member key)
+    const derivedKey = this.getPathDerivedKey(this.#currentPath);
+
     return new MemberID(derivedKey);
   }
 
@@ -846,18 +877,9 @@ class MasterID extends BaseClass {
    */
   exportMember(): { wif: string; encryptedData: string } {
     const memberExport = this.exportMemberBackup();
-    
-    let derivedKey: PrivateKey;
-    if (this.#isType42) {
-      if (!this.#masterPrivateKey) throw new Error("Master private key not initialized");
-      derivedKey = this.#masterPrivateKey.deriveChild(
-        this.#masterPrivateKey.toPublicKey(),
-        this.#currentPath
-      );
-    } else {
-      if (!this.#HDPrivateKey) throw new Error("HD private key not initialized");
-      derivedKey = this.#HDPrivateKey.derive(this.#currentPath).privKey;
-    }
+
+    // Get the path-derived key (member key)
+    const derivedKey = this.getPathDerivedKey(this.#currentPath);
 
     // Encrypt the member data using ECIES
     const encryptedData = toBase64(
