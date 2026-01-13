@@ -1,17 +1,13 @@
 import {
-  BSM,
   PublicKey,
   PrivateKey,
-  BigNumber,
   Hash,
   Utils as BSVUtils,
   ECIES,
 } from "@bsv/sdk";
-import type { Signature } from "@bsv/sdk";
 import { BaseClass } from "./BaseClass";
 import type { IdentityAttributes, MemberIdentity } from "./interface";
-import { ENCRYPTION_PATH } from "./constants";
-const { magicHash } = BSM;
+import { ENCRYPTION_PATH, BAP_INVOICE_NUMBER } from "./constants";
 const { toArray, toUTF8, toBase64, toHex } = BSVUtils;
 const { electrumDecrypt, electrumEncrypt } = ECIES;
 
@@ -25,31 +21,49 @@ export class MemberID extends BaseClass {
   constructor(key: PrivateKey, identityAttributes: IdentityAttributes = {}) {
     super();
     this.key = key;
-    this.address = key.toAddress();
+    // Address is derived from the identity signing key
+    // The member key is the root, signing address is derived one level deeper
+    this.address = this.getIdentitySigningKey().toPublicKey().toAddress();
     this.idName = "Member ID 1";
     this.description = "";
     this.identityKey = "";
     this.identityAttributes = this.parseAttributes(identityAttributes);
   }
 
+  /**
+   * Get the derived identity signing key
+   * This is derived from the member key using the BAP protocol pattern
+   * invoiceNumber = "1-bap-identity" (securityLevel-protocolName-keyID)
+   */
+  private getIdentitySigningKey(): PrivateKey {
+    return this.key.deriveChild(this.key.toPublicKey(), BAP_INVOICE_NUMBER);
+  }
+
+  /**
+   * Get the member key's public key
+   * This is the root key for this member before signing key derivation
+   * @returns The member's public key hex string
+   */
+  public getMemberKey(): string {
+    return this.key.toPublicKey().toString();
+  }
+
+  /**
+   * Get the legacy (pre-signing-key-derivation) address
+   * This is the address without the extra "1-bap-identity" derivation
+   */
+  public getLegacyAddress(): string {
+    return this.key.toPublicKey().toAddress();
+  }
+
   // Implement the abstract signMessage method from BaseClass
+  // Signs with the derived identity signing key
   public signMessage(
     message: number[],
     _signingPath?: string
   ): { address: string; signature: string } {
-    const childPk = this.key;
-    const address = childPk.toAddress();
-
-    // Sign using the raw message buffer directly
-    const dummySig = BSM.sign(message, childPk, "raw") as Signature;
-    const h = new BigNumber(magicHash(message));
-    const r = dummySig.CalculateRecoveryFactor(childPk.toPublicKey(), h);
-
-    const signature = (
-      BSM.sign(message, childPk, "raw") as Signature
-    ).toCompact(r, true, "base64") as string;
-
-    return { address, signature };
+    const signingKey = this.getIdentitySigningKey();
+    return this.signWithBSM(message, signingKey);
   }
 
   // Implement signOpReturnWithAIP - MemberID ignores signing path
@@ -59,9 +73,10 @@ export class MemberID extends BaseClass {
     return this.formatAIPOutput(aipMessageBuffer, address, signature);
   }
 
-  // Return the member's public key
+  // Return the derived identity signing public key
+  // This matches the address used for on-chain operations
   public getPublicKey(): string {
-    return this.key.toPublicKey().toString();
+    return this.getIdentitySigningKey().toPublicKey().toString();
   }
 
   // Import the member identity from an object containing the derived private key and identity data
@@ -69,7 +84,8 @@ export class MemberID extends BaseClass {
     this.idName = identity.name;
     this.description = identity.description;
     this.key = PrivateKey.fromWif(identity.derivedPrivateKey);
-    this.address = this.key.toAddress();
+    // Address is derived from the identity signing key
+    this.address = this.getIdentitySigningKey().toPublicKey().toAddress();
     this.identityAttributes = identity.identityAttributes || {};
     this.identityKey = identity.identityKey;
   }

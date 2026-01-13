@@ -1,9 +1,10 @@
-import { ECIES, Utils as BSVUtils, OP, PublicKey } from "@bsv/sdk";
-import type { PrivateKey } from "@bsv/sdk";
+import { ECIES, Utils as BSVUtils, OP, PublicKey, BSM, BigNumber } from "@bsv/sdk";
+import type { PrivateKey, Signature } from "@bsv/sdk";
 import { AIP_BITCOM_ADDRESS } from "./constants";
 import type { IdentityAttribute, IdentityAttributes } from "./interface";
 import { Utils } from "./utils";
 const { toArray, toUTF8, toBase64 } = BSVUtils;
+const { magicHash } = BSM;
 const { electrumDecrypt, electrumEncrypt } = ECIES;
 
 abstract class BaseClass {
@@ -24,6 +25,28 @@ abstract class BaseClass {
    * Abstract method that must be implemented by derived classes to get encryption key
    */
   abstract getEncryptionKey(): { privKey: PrivateKey; pubKey: PublicKey };
+
+  /**
+   * Low-level BSM signing helper - signs a message with the given private key
+   * This consolidates the BSM signing logic used across all signing methods
+   * @param message - The message to sign as number array
+   * @param signingKey - The private key to sign with
+   * @returns Object containing address and base64 signature
+   */
+  protected signWithBSM(
+    message: number[],
+    signingKey: PrivateKey
+  ): { address: string; signature: string } {
+    const address = signingKey.toPublicKey().toAddress();
+    const dummySig = BSM.sign(message, signingKey, "raw") as Signature;
+    const h = new BigNumber(magicHash(message));
+    const r = dummySig.CalculateRecoveryFactor(signingKey.toPublicKey(), h);
+    const signature = (
+      BSM.sign(message, signingKey, "raw") as Signature
+    ).toCompact(r, true, "base64") as string;
+
+    return { address, signature };
+  }
 
   /**
    * Encrypt the given string data with the identity encryption key
