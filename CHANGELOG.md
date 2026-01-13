@@ -1,6 +1,19 @@
 # Changelog
 
 
+## [0.1.14] - 2026-01-13
+
+### Added
+- Identity signing key derivation using Type 42 (BRC-42) pattern for BRC-100 wallet compatibility
+- Migration support for legacy identities: `getLegacyAddress()`, `needsRotation()`, `getLegacyRotationTransaction()`
+- Seed-based encryption methods on MemberID: `encryptWithSeed()`, `decryptWithSeed()`, `getEncryptionKeyWithSeed()`
+- Consolidated `signWithBSM()` helper in BaseClass
+
+### Changed
+- Signing keys now derived from member keys using `deriveChild(pubKey, "1-bap-identity")`
+- Updated documentation with key hierarchy explanation
+
+
 ## [0.1.12] - 2025-06-18
 
 ### Added
