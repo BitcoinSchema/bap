@@ -1,6 +1,12 @@
 # Changelog
 
 
+## [0.1.16] - 2026-01-16
+
+### Fixed
+- CLI now imports from `bsv-bap` package instead of relative path for proper global installation
+
+
 ## [0.1.15] - 2026-01-16
 
 ### Added

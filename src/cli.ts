@@ -18,7 +18,7 @@ import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { PrivateKey, Utils } from "@bsv/sdk";
-import { BAP, MemberID } from "./index";
+import { BAP } from "bsv-bap";
 
 const { toHex, toArray } = Utils;
 
