@@ -7,7 +7,7 @@ import {
 } from "@bsv/sdk";
 import { BaseClass } from "./BaseClass";
 import type { IdentityAttributes, MemberIdentity } from "./interface";
-import { ENCRYPTION_PATH, BAP_INVOICE_NUMBER } from "./constants";
+import { ENCRYPTION_PATH, BAP_INVOICE_NUMBER, FRIEND_SECURITY_LEVEL, FRIEND_PROTOCOL } from "./constants";
 const { toArray, toUTF8, toBase64, toHex } = BSVUtils;
 const { electrumDecrypt, electrumEncrypt } = ECIES;
 
@@ -143,14 +143,17 @@ export class MemberID extends BaseClass {
   /**
    * Get a derived encryption key using a seed string (Type42 derivation)
    * This allows deriving unique encryption keys per friend/conversation
+   * Uses BRC-43 format: `${securityLevel}-${protocol}-${keyID}`
    * @param seed - The seed string (e.g., friend's BAP ID)
    * @returns The derived private key for this seed
    */
   private getEncryptionPrivateKeyWithSeed(seed: string): PrivateKey {
-    // Hash the seed to get a deterministic value
+    // Hash the seed to get a deterministic key ID
     const seedHash = toHex(Hash.sha256(seed, "utf8"));
+    // BRC-43 format: security level 2 (counterparty-specific)
+    const invoiceNumber = `${FRIEND_SECURITY_LEVEL}-${FRIEND_PROTOCOL}-${seedHash}`;
     // Use Type42 derivation: deriveChild(publicKey, invoice)
-    return this.key.deriveChild(this.key.toPublicKey(), seedHash);
+    return this.key.deriveChild(this.key.toPublicKey(), invoiceNumber);
   }
 
   /**

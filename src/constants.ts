@@ -18,3 +18,9 @@ export const ENCRYPTION_PATH = `m/424150'/${MAX_INT}'/${MAX_INT}'`;
 export const BAP_PROTOCOL_ID: [1, string] = [1, "bap"];
 export const BAP_KEY_ID = "identity";
 export const BAP_INVOICE_NUMBER = "1-bap-identity"; // Pre-computed for Type42 deriveChild
+
+// Friend encryption key derivation constants
+// Security level 2: counterparty-specific keys requiring user approval
+// Format: `2-friend-${sha256(friendBapId)}`
+export const FRIEND_SECURITY_LEVEL = 2;
+export const FRIEND_PROTOCOL = "friend";

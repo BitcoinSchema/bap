@@ -1,6 +1,17 @@
 # Changelog
 
 
+## [0.1.15] - 2026-01-16
+
+### Added
+- CLI tool (`bap`) for command-line BAP operations: create, sign, verify, friend-pubkey, encrypt, decrypt, export, import, info
+- BRC-43 constants for friend encryption: `FRIEND_SECURITY_LEVEL`, `FRIEND_PROTOCOL`
+
+### Changed
+- Friend key derivation now uses BRC-43 format: `2-friend-{sha256(friendBapId)}` instead of raw hash
+- Updated `getEncryptionPrivateKeyWithSeed()` to use proper invoice number format
+
+
 ## [0.1.14] - 2026-01-13
 
 ### Added
