@@ -40,6 +40,24 @@ const { electrumEncrypt, electrumDecrypt } = ECIES;
 
 type Identities = { lastIdPath: string; ids: Identity[] };
 
+/** Backup format for Type 42 mode (rootPk-based) */
+export interface Type42MasterBackup {
+  ids: string;
+  rootPk: string;
+  mnemonic?: string;
+  label?: string;
+  createdAt: string;
+}
+
+/** Backup format for BIP32 mode (xprv-based, legacy) */
+export interface Bip32MasterBackup {
+  ids: string;
+  xprv: string;
+  mnemonic?: string;
+  label?: string;
+  createdAt: string;
+}
+
 // Type 42 parameters
 interface Type42Params {
   rootPk: string;  // WIF format private key
@@ -953,14 +971,7 @@ export class BAP {
     label?: string,
     xprv?: string,
     mnemonic?: string
-  ): {
-    ids: string;
-    xprv?: string;
-    mnemonic?: string;
-    rootPk?: string;
-    label?: string;
-    createdAt: string;
-  } {
+  ): Type42MasterBackup | Bip32MasterBackup {
     const ids = this.exportIds(); // This returns encrypted string by default
     const baseBackup = {
       ids,
