@@ -922,7 +922,7 @@ export class BAP {
     address: string
   ): Promise<GetIdentityByAddressResponse> {
     return this.getApiData<GetIdentityByAddressResponse>(
-      "/identity/from-address",
+      "/identity/validByAddress",
       {
         address,
       }
