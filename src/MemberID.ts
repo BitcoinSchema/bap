@@ -1,13 +1,18 @@
 import {
-  PublicKey,
-  PrivateKey,
-  Hash,
   Utils as BSVUtils,
   ECIES,
+  Hash,
+  PrivateKey,
+  PublicKey,
 } from "@bsv/sdk";
 import { BaseClass } from "./BaseClass";
+import {
+  ENCRYPTION_PATH,
+  FRIEND_PROTOCOL,
+  FRIEND_SECURITY_LEVEL,
+} from "./constants";
 import type { IdentityAttributes, MemberIdentity } from "./interface";
-import { ENCRYPTION_PATH, BAP_INVOICE_NUMBER, FRIEND_SECURITY_LEVEL, FRIEND_PROTOCOL } from "./constants";
+
 const { toArray, toUTF8, toBase64, toHex } = BSVUtils;
 const { electrumDecrypt, electrumEncrypt } = ECIES;
 
@@ -21,49 +26,18 @@ export class MemberID extends BaseClass {
   constructor(key: PrivateKey, identityAttributes: IdentityAttributes = {}) {
     super();
     this.key = key;
-    // Address is derived from the identity signing key
-    // The member key is the root, signing address is derived one level deeper
-    this.address = this.getIdentitySigningKey().toPublicKey().toAddress();
+    this.address = this.key.toPublicKey().toAddress();
     this.idName = "Member ID 1";
     this.description = "";
     this.identityKey = "";
     this.identityAttributes = this.parseAttributes(identityAttributes);
   }
 
-  /**
-   * Get the derived identity signing key
-   * This is derived from the member key using the BAP protocol pattern
-   * invoiceNumber = "1-bap-identity" (securityLevel-protocolName-keyID)
-   */
-  private getIdentitySigningKey(): PrivateKey {
-    return this.key.deriveChild(this.key.toPublicKey(), BAP_INVOICE_NUMBER);
-  }
-
-  /**
-   * Get the member key's public key
-   * This is the root key for this member before signing key derivation
-   * @returns The member's public key hex string
-   */
-  public getMemberKey(): string {
-    return this.key.toPublicKey().toString();
-  }
-
-  /**
-   * Get the legacy (pre-signing-key-derivation) address
-   * This is the address without the extra "1-bap-identity" derivation
-   */
-  public getLegacyAddress(): string {
-    return this.key.toPublicKey().toAddress();
-  }
-
-  // Implement the abstract signMessage method from BaseClass
-  // Signs with the derived identity signing key
   public signMessage(
     message: number[],
     _signingPath?: string
   ): { address: string; signature: string } {
-    const signingKey = this.getIdentitySigningKey();
-    return this.signWithBSM(message, signingKey);
+    return this.signWithBSM(message, this.key);
   }
 
   // Implement signOpReturnWithAIP - MemberID ignores signing path
@@ -73,19 +47,15 @@ export class MemberID extends BaseClass {
     return this.formatAIPOutput(aipMessageBuffer, address, signature);
   }
 
-  // Return the derived identity signing public key
-  // This matches the address used for on-chain operations
   public getPublicKey(): string {
-    return this.getIdentitySigningKey().toPublicKey().toString();
+    return this.key.toPublicKey().toString();
   }
 
-  // Import the member identity from an object containing the derived private key and identity data
   public import(identity: MemberIdentity): void {
     this.idName = identity.name;
     this.description = identity.description;
     this.key = PrivateKey.fromWif(identity.derivedPrivateKey);
-    // Address is derived from the identity signing key
-    this.address = this.getIdentitySigningKey().toPublicKey().toAddress();
+    this.address = this.key.toPublicKey().toAddress();
     this.identityAttributes = identity.identityAttributes || {};
     this.identityKey = identity.identityKey;
   }
@@ -160,7 +130,10 @@ export class MemberID extends BaseClass {
    * Get the encryption key pair for a specific seed
    * @param seed - The seed string (e.g., friend's BAP ID)
    */
-  getEncryptionKeyWithSeed(seed: string): { privKey: PrivateKey; pubKey: PublicKey } {
+  getEncryptionKeyWithSeed(seed: string): {
+    privKey: PrivateKey;
+    pubKey: PublicKey;
+  } {
     const privKey = this.getEncryptionPrivateKeyWithSeed(seed);
     return {
       privKey,
@@ -184,15 +157,22 @@ export class MemberID extends BaseClass {
    * @param counterPartyPublicKey - Optional public key of the recipient
    * @returns Base64 encoded encrypted data
    */
-  encryptWithSeed(stringData: string, seed: string, counterPartyPublicKey?: string): string {
+  encryptWithSeed(
+    stringData: string,
+    seed: string,
+    counterPartyPublicKey?: string
+  ): string {
     const derivedKey = this.getEncryptionPrivateKeyWithSeed(seed);
     const pubKey = derivedKey.toPublicKey();
     // Import PublicKey type-safely - counterPartyPublicKey is already a hex pubkey string
-    const PublicKeyClass = this.key.toPublicKey().constructor as typeof import("@bsv/sdk").PublicKey;
+    const PublicKeyClass = this.key.toPublicKey()
+      .constructor as typeof import("@bsv/sdk").PublicKey;
     const targetPubKey = counterPartyPublicKey
       ? PublicKeyClass.fromString(counterPartyPublicKey)
       : pubKey;
-    return toBase64(electrumEncrypt(toArray(stringData), targetPubKey, derivedKey));
+    return toBase64(
+      electrumEncrypt(toArray(stringData), targetPubKey, derivedKey)
+    );
   }
 
   /**
@@ -202,13 +182,19 @@ export class MemberID extends BaseClass {
    * @param counterPartyPublicKey - Optional public key of the sender
    * @returns Decrypted string
    */
-  decryptWithSeed(ciphertext: string, seed: string, counterPartyPublicKey?: string): string {
+  decryptWithSeed(
+    ciphertext: string,
+    seed: string,
+    counterPartyPublicKey?: string
+  ): string {
     const derivedKey = this.getEncryptionPrivateKeyWithSeed(seed);
     let senderPubKey: PublicKey | undefined;
     if (counterPartyPublicKey) {
       senderPubKey = PublicKey.fromString(counterPartyPublicKey);
     }
-    return toUTF8(electrumDecrypt(toArray(ciphertext, "base64"), derivedKey, senderPubKey));
+    return toUTF8(
+      electrumDecrypt(toArray(ciphertext, "base64"), derivedKey, senderPubKey)
+    );
   }
 
   /**
