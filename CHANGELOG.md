@@ -1,6 +1,15 @@
 # Changelog
 
 
+## [0.1.20] - 2026-02-20
+
+### Changed
+- Removed the extra `deriveChild(pubKey, "1-bap-identity")` signing key derivation layer; identity key is now the member key directly
+- Removed migration helpers: `getLegacyAddress`, `needsRotation`, `getLegacyRotationTransaction`, `getMemberKey`
+- Removed constants: `BAP_PROTOCOL_ID`, `BAP_KEY_ID`, `BAP_INVOICE_NUMBER`
+- Updated test vectors to match reverted derivation behavior
+
+
 ## [0.1.16] - 2026-01-16
 
 ### Fixed
