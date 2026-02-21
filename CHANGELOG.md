@@ -1,6 +1,14 @@
 # Changelog
 
 
+## [0.1.21] - 2026-02-20
+
+### Fixed
+- `getIdentityFromAddress` now calls `/identity/validByAddress` endpoint (was `/identity/from-address`)
+
+> Note: Skips 0.1.19 (unused) and 0.1.20 (retracted — incorrectly removed signing key derivation).
+
+
 ## [0.1.16] - 2026-01-16
 
 ### Fixed
