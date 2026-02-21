@@ -1,7 +1,7 @@
-import { describe, expect, test } from "bun:test";
+import { describe, test, expect } from "bun:test";
+import { MemberID } from "../src/MemberID";
 import { PrivateKey, PublicKey, Utils } from "@bsv/sdk";
 import type { IdentityAttributes } from "../src/interface";
-import { MemberID } from "../src/MemberID";
 
 const testWIF = "L15CzYWPiqY1R5fLPjRFB2PTGUqRP34EYCy72jusd47otmYx3G2z";
 const { toArray } = Utils;
@@ -55,11 +55,17 @@ describe("MemberID Backup and Import", () => {
     expect(result.signature.length).toBeGreaterThan(0);
   });
 
-  test("MemberID getPublicKey returns member key public key", () => {
+  test("MemberID getPublicKey returns derived signing key public key", () => {
     const privateKey = PrivateKey.fromWif(testWIF);
     const member = new MemberID(privateKey);
+    // getPublicKey returns the derived identity signing key's public key
+    // which is different from the member key's public key
     const memberPubKey = privateKey.toPublicKey().toString();
-    expect(member.getPublicKey()).toBe(memberPubKey);
+    const derivedPubKey = member.getPublicKey();
+    // They should be different (signing key is derived one more level)
+    expect(derivedPubKey).not.toBe(memberPubKey);
+    // getMemberKey returns the member key's public key (root for derivation)
+    expect(member.getMemberKey()).toBe(memberPubKey);
   });
 
   test("MemberID import/export consistency", () => {
