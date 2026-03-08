@@ -1033,6 +1033,7 @@ export class BAP {
 }
 
 export { MasterID, MemberID };
+export { bapIdFromAddress, bapIdFromPubkey } from "./utils";
 export type {
   Attestation,
   Identity,

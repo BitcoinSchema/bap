@@ -26,7 +26,7 @@ import type {
   OldIdentity,
   MemberIdentity,
 } from "./interface";
-import { Utils } from "./utils";
+import { Utils, bapIdFromAddress } from "./utils";
 import { MemberID } from "./MemberID";
 import { BaseClass } from "./BaseClass";
 const { toArray, toHex, toBase58, toUTF8, toBase64 } = BSVUtils;
@@ -148,9 +148,7 @@ class MasterID extends BaseClass {
   }
 
   deriveIdentityKey(address: string): string {
-    // base58( ripemd160 ( sha256 ( rootAddress ) ) )
-    const rootAddressHash = toHex(Hash.sha256(address, "utf8"));
-    return toBase58(Hash.ripemd160(rootAddressHash, "hex"));
+    return bapIdFromAddress(address);
   }
 
   /**

@@ -1,4 +1,38 @@
+import { Hash, PublicKey, Utils as BSVUtils } from "@bsv/sdk";
 import type { PathPrefix } from "./interface.js";
+
+const { toHex, toBase58 } = BSVUtils;
+
+/**
+ * Derive a BAP ID from a Bitcoin address (rootAddress).
+ *
+ * BAP ID = base58(ripemd160(sha256(rootAddress)))
+ *
+ * This is the canonical derivation used by MasterID.deriveIdentityKey().
+ * The address MUST be the rootAddress (from the BAP member key), not a
+ * signing key address.
+ */
+export function bapIdFromAddress(address: string): string {
+  const rootAddressHash = toHex(Hash.sha256(address, "utf8"));
+  return toBase58(Hash.ripemd160(rootAddressHash, "hex"));
+}
+
+/**
+ * Derive a BAP ID from a compressed public key (hex).
+ *
+ * Converts the pubkey to a Bitcoin address, then derives the BAP ID.
+ *
+ * IMPORTANT: This only produces a correct BAP ID when the pubkey is the
+ * BAP member key's public key. It does NOT work with signing keys or
+ * arbitrary public keys.
+ *
+ * In BRC-100 wallets, the BRC-31 identity key IS the member key's pubkey,
+ * so this correctly bridges BRC-31 auth to BAP identity lookups.
+ */
+export function bapIdFromPubkey(pubkeyHex: string): string {
+  const pubkey = PublicKey.fromString(pubkeyHex);
+  return bapIdFromAddress(pubkey.toAddress());
+}
 
 export const Utils = {
   /**
