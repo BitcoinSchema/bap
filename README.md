@@ -156,6 +156,33 @@ async function discoverIdentities(bap, checkExistsOnChain) {
 }
 ```
 
+### Wallet Rotation Semantics
+
+The BAP ID is defined by the member key at `rootPath`, while the active wallet/signing root follows `currentPath`.
+
+- `rootPath`: stable member key, used to derive the BAP ID
+- `currentPath`: active wallet root, used for signing and wallet operations
+- `incrementPath()`: rotates the wallet/signing root without changing the BAP ID
+
+For Type 42 identities the first rotation now moves from `bap:0` to `bap:0:1`, then `bap:0:2`, and so on.
+
+For backward compatibility, malformed numeric rotation paths created by older buggy Type 42 builds continue rotating numerically (`1` -> `2`). New identities always use the namespaced `bap:<identity>:<rotation>` format.
+
+```javascript
+const identity = bap.newId('Professional Identity');
+
+const stableMemberKey = identity.getMemberKey();
+const activeWalletKey = identity.getWalletPubkey();
+
+identity.incrementPath();
+
+// Stable identity linkage
+console.log(identity.getMemberKey() === stableMemberKey); // true
+
+// Rotated wallet/signing root
+console.log(identity.getWalletPubkey() === activeWalletKey); // false
+```
+
 ### Migration from Legacy Derivation
 
 Existing identities using the previous (pre-signing-key-derivation) format can be migrated:

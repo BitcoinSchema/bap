@@ -126,6 +126,30 @@ export const Utils = {
    * @returns {*}
    */
   getNextPath(path: string) {
+    const type42Path = path.match(/^bap:(\d+)(?::(\d+))?$/);
+    if (type42Path) {
+      const identityIndex = type42Path[1];
+      const rotationIndex = type42Path[2];
+
+      if (rotationIndex === undefined) {
+        return `bap:${identityIndex}:1`;
+      }
+
+      return `bap:${identityIndex}:${Number(rotationIndex) + 1}`;
+    }
+
+    // Backward compatibility for Type 42 backups created before the
+    // `bap:<identity>:<rotation>` format was fixed. Those backups stored
+    // bare numeric rotation paths like "1", and must keep rotating within
+    // that legacy namespace so previously derived keys remain valid.
+    if (/^\d+$/.test(path)) {
+      return (Number(path) + 1).toString();
+    }
+
+    if (!path.includes("/")) {
+      throw new Error(`Unsupported non-BIP32 path: ${path}`);
+    }
+
     const pathValues = path.split("/");
     const lastPart = pathValues[pathValues.length - 1];
     let hardened = false;

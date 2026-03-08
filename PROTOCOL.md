@@ -854,6 +854,32 @@ const bap = new BAP({
 - **Compatibility**: Both modes are fully compatible with the BAP protocol
 - **Migration**: See [Type 42 Migration Guide](./docs/TYPE42_MIGRATION.md) for details
 
+## Type 42 Identity and Wallet Semantics
+
+In Type 42 mode, the current BAP hierarchy already separates stable identity from active wallet state:
+
+- `rootPath` (for example `bap:0`) derives the stable member key
+- the BAP ID is derived from that member key's address
+- `currentPath` derives the active wallet root for signing and wallet operations
+- `incrementPath()` rotates `currentPath` without changing the BAP ID
+
+Rotation path examples:
+
+- `bap:0` -> `bap:0:1`
+- `bap:0:1` -> `bap:0:2`
+
+Backward compatibility note:
+
+- previously buggy Type 42 backups may contain numeric-only rotation paths such as `1`
+- those paths continue rotating numerically (`1` -> `2`) so old derived keys remain valid
+- newly created Type 42 identities use the namespaced `bap:<identity>:<rotation>` format
+
+Public API mapping:
+
+- `getMemberKey()` -> stable member key at `rootPath`
+- `getWalletRoot()` / `getWalletPubkey()` -> active wallet root at `currentPath`
+- `getCurrentAddress()` -> current signing address derived from the active wallet root
+
 # Bitcoin Backup Compatible Export Methods
 
 The BAP library provides export methods that are compatible with the [bitcoin-backup](https://github.com/yourusername/bitcoin-backup) package format. These methods allow you to export master and member identities in a format that can be directly used with bitcoin-backup for secure storage.

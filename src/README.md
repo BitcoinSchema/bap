@@ -165,6 +165,15 @@ getAttributeUrn(name: string): string | null
 ##### Key Management
 
 ```typescript
+// Get the stable member key used to derive the BAP ID
+getMemberKey(): string
+
+// Get the active wallet root private key
+getWalletRoot(path?: string): PrivateKey
+
+// Get the active wallet root public key
+getWalletPubkey(path?: string): string
+
 // Get current signing address
 getCurrentAddress(): string
 
@@ -401,6 +410,20 @@ identity.idName = "Work Identity";  // Human-readable name
 identity.rootPath = "bap:0";        // Cryptographic derivation path
 ```
 
+Rotation uses the current path as the active wallet root. The BAP ID remains tied to the member key at `rootPath`, while `incrementPath()` advances the wallet/signing root:
+
+```typescript
+identity.rootPath === "bap:0";
+identity.currentPath === "bap:0";
+
+identity.incrementPath();
+
+identity.rootPath === "bap:0";
+identity.currentPath === "bap:0:1";
+```
+
+For backward compatibility, malformed numeric rotation paths from older buggy Type 42 builds continue rotating numerically (`1` -> `2`). Newly created identities use the namespaced `bap:<identity>:<rotation>` format.
+
 **Discovery**: Sequential counters enable systematic identity recovery:
 
 ```typescript
@@ -421,6 +444,12 @@ Each identity has a unique encryption key:
 BIP32: rootPath → m/424150'/2147483647'/2147483647'
 Type 42: rootKey → deriveChild(rootPk.pubKey, path)
 ```
+
+For wallet-aware consumers:
+
+- `getMemberKey()` returns the stable member key at `rootPath`
+- `getWalletRoot()` / `getWalletPubkey()` return the active wallet root at `currentPath`
+- signing addresses are derived from the wallet root using `1-bap-identity`
 
 ## Usage Examples
 

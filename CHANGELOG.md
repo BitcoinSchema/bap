@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.1.23] - 2026-03-08
+
+### Added
+- Explicit wallet-root APIs on `MasterID`: `getWalletRoot()` and `getWalletPubkey()`
+- Regression coverage for Type 42 wallet rotation, stable member keys, and export/import round-trips
+
+### Fixed
+- Type 42 rotation paths now preserve the identity prefix during rotation (`bap:0 -> bap:0:1 -> bap:0:2`)
+- `getMemberKey()` now consistently returns the stable member key at `rootPath`
+- Legacy malformed Type 42 rotation paths stored as bare numbers (`"1"`, `"2"`) continue rotating for backward compatibility
+
+### Documentation
+- Clarified the Type 42 hierarchy: `rootPath` defines the stable BAP identity and `currentPath` defines the active wallet/signing root
+- Documented wallet rotation semantics and the new wallet-root APIs across the public docs
+
 
 ## [0.1.21] - 2026-02-20
 

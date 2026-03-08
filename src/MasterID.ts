@@ -29,7 +29,7 @@ import type {
 import { Utils, bapIdFromAddress } from "./utils";
 import { MemberID } from "./MemberID";
 import { BaseClass } from "./BaseClass";
-const { toArray, toHex, toBase58, toUTF8, toBase64 } = BSVUtils;
+const { toArray, toHex, toUTF8, toBase64 } = BSVUtils;
 const { electrumDecrypt, electrumEncrypt } = ECIES;
 
 // Type 42 key source
@@ -397,8 +397,10 @@ class MasterID extends BaseClass {
   }
 
   /**
-   * Get the private key for a given path (before identity signing key derivation)
-   * This is the "member key" for the path
+   * Get the path-derived private key before identity signing derivation.
+   *
+   * At rootPath this is the stable member key that defines the BAP ID.
+   * At currentPath this is the active wallet root used for signing/wallet operations.
    */
   private getPathDerivedKey(path: string): PrivateKey {
     if (this.#isType42) {
@@ -422,12 +424,27 @@ class MasterID extends BaseClass {
   }
 
   /**
-   * Get the member key's public key for the given path
-   * This is the root key before signing key derivation
+   * Get the stable member key's public key for this identity.
+   * This always resolves from rootPath and must not follow currentPath rotations.
    */
-  public getMemberKey(path?: string): string {
-    const pathToUse = path || this.#currentPath;
-    return this.getPathDerivedKey(pathToUse).toPublicKey().toString();
+  public getMemberKey(): string {
+    return this.getPathDerivedKey(this.#rootPath).toPublicKey().toString();
+  }
+
+  /**
+   * Get the active wallet root private key for the given path.
+   * Defaults to currentPath, which follows key rotation.
+   */
+  public getWalletRoot(path?: string): PrivateKey {
+    return this.getPathDerivedKey(path || this.#currentPath);
+  }
+
+  /**
+   * Get the active wallet root public key for the given path.
+   * Defaults to currentPath, which follows key rotation.
+   */
+  public getWalletPubkey(path?: string): string {
+    return this.getWalletRoot(path).toPublicKey().toString();
   }
 
   /**

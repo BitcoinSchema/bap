@@ -1,6 +1,6 @@
 {
   "name": "bsv-bap",
-  "version": "0.1.22",
+  "version": "0.1.23",
   "description": "BAP npm module",
   "repository": {
     "type": "git",
