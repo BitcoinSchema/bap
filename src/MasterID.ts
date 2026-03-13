@@ -1,97 +1,54 @@
 import {
-  Utils as BSVUtils,
-  ECIES,
   Hash,
-  PublicKey,
   type PrivateKey,
   HD,
+  Utils as BSVUtils,
 } from "@bsv/sdk";
 
-import { type APIFetcher, apiFetcher } from "./api";
-import type {
-  GetAttestationResponse,
-  GetSigningKeysResponse,
-} from "./apiTypes";
 import {
-  BAP_BITCOM_ADDRESS,
-  BAP_SERVER,
-  ENCRYPTION_PATH,
-  MAX_INT,
   SIGNING_PATH_PREFIX,
-  BAP_INVOICE_NUMBER,
+  MAX_INT,
 } from "./constants";
 import type {
   Identity,
-  IdentityAttributes,
   OldIdentity,
-  MemberIdentity,
 } from "./interface";
 import { Utils, bapIdFromAddress } from "./utils";
-import { MemberID } from "./MemberID";
-import { BaseClass } from "./BaseClass";
-const { toArray, toHex, toUTF8, toBase64 } = BSVUtils;
-const { electrumDecrypt, electrumEncrypt } = ECIES;
 
-// Type 42 key source
 interface Type42KeySource {
   rootPk: PrivateKey;
 }
 
-/**
- * MasterID class
- *
- * This class should be used in conjunction with the BAP class
- * Supports both BIP32 (HD) and Type 42 key derivation
- *
- * @type {MasterID}
- */
-class MasterID extends BaseClass {
+class MasterID {
   #HDPrivateKey: HD | undefined;
   #masterPrivateKey: PrivateKey | undefined;
   #isType42: boolean;
-  #BAP_SERVER: string = BAP_SERVER;
-  #BAP_TOKEN = "";
   #rootPath: string;
-  #previousPath: string;
   #currentPath: string;
+  #previousPath: string;
   #idSeed: string;
 
-  idName: string;
-  description: string;
-
   rootAddress: string;
-  identityKey: string;
-  identityAttributes: IdentityAttributes;
-
-  getApiData: APIFetcher;
+  bapId: string;
 
   constructor(
     keySource: HD | Type42KeySource,
-    identityAttributes: IdentityAttributes = {},
     idSeed = ""
   ) {
-    super();
-
-    // Determine if we're using Type 42 or BIP32
     if (keySource instanceof HD) {
-      // BIP32 mode
       this.#isType42 = false;
       if (idSeed) {
-        // create a new HDPrivateKey based on the seed
-        const seedHex = toHex(Hash.sha256(idSeed, "utf8"));
+        const seedHex = BSVUtils.toHex(Hash.sha256(idSeed, "utf8"));
         const seedPath = Utils.getSigningPathFromHex(seedHex);
         this.#HDPrivateKey = keySource.derive(seedPath);
       } else {
         this.#HDPrivateKey = keySource;
       }
     } else {
-      // Type 42 mode
       this.#isType42 = true;
       this.#masterPrivateKey = keySource.rootPk;
-      
       if (idSeed) {
-        // For Type 42 with seed, we derive a new master key using the seed as invoice number
-        const seedHex = toHex(Hash.sha256(idSeed, "utf8"));
+        const seedHex = BSVUtils.toHex(Hash.sha256(idSeed, "utf8"));
         this.#masterPrivateKey = this.#masterPrivateKey.deriveChild(
           this.#masterPrivateKey.toPublicKey(),
           seedHex
@@ -100,17 +57,13 @@ class MasterID extends BaseClass {
     }
 
     this.#idSeed = idSeed;
-    this.idName = "ID 1";
-    this.description = "";
 
     this.#rootPath = `${SIGNING_PATH_PREFIX}/0/0/0`;
     this.#previousPath = `${SIGNING_PATH_PREFIX}/0/0/0`;
     this.#currentPath = `${SIGNING_PATH_PREFIX}/0/0/1`;
 
-    // Derive root address based on mode
     if (this.#isType42) {
       if (!this.#masterPrivateKey) throw new Error("Master private key not initialized");
-      // In Type 42, we use the path as invoice number
       const rootKey = this.#masterPrivateKey.deriveChild(
         this.#masterPrivateKey.toPublicKey(),
         this.#rootPath
@@ -121,185 +74,75 @@ class MasterID extends BaseClass {
       const rootChild = this.#HDPrivateKey.derive(this.#rootPath);
       this.rootAddress = rootChild.privKey.toPublicKey().toAddress();
     }
-    
-    this.identityKey = this.deriveIdentityKey(this.rootAddress);
 
-    // unlink the object
-    const attributes = { ...identityAttributes };
-    this.identityAttributes = this.parseAttributes(attributes);
-
-    this.getApiData = apiFetcher(this.#BAP_SERVER, this.#BAP_TOKEN);
-  }
-
-  set BAP_SERVER(bapServer) {
-    this.#BAP_SERVER = bapServer;
-  }
-
-  get BAP_SERVER(): string {
-    return this.#BAP_SERVER;
-  }
-
-  set BAP_TOKEN(token) {
-    this.#BAP_TOKEN = token;
-  }
-
-  get BAP_TOKEN(): string {
-    return this.#BAP_TOKEN;
-  }
-
-  deriveIdentityKey(address: string): string {
-    return bapIdFromAddress(address);
+    this.bapId = bapIdFromAddress(this.rootAddress);
   }
 
   /**
-   * Helper function to parse identity attributes
-   *
-   * @param identityAttributes
-   * @returns {{}}
+   * Get the account key (root key) for this identity.
+   * This is the cold key used for BAP ID creation and revocation.
    */
-  parseAttributes(
-    identityAttributes: IdentityAttributes | string
-  ): IdentityAttributes {
-    if (typeof identityAttributes === "string") {
-      return this.parseStringUrns(identityAttributes);
+  getAccountKey(): PrivateKey {
+    return this.getPathDerivedKey(this.#rootPath);
+  }
+
+  private getPathDerivedKey(path: string): PrivateKey {
+    if (this.#isType42) {
+      if (!this.#masterPrivateKey) throw new Error("Master private key not initialized");
+      return this.#masterPrivateKey.deriveChild(
+        this.#masterPrivateKey.toPublicKey(),
+        path
+      );
     }
-
-    for (const key in identityAttributes) {
-      if (!identityAttributes[key].value || !identityAttributes[key].nonce) {
-        throw new Error("Invalid identity attribute");
-      }
-    }
-
-    return identityAttributes || {};
+    if (!this.#HDPrivateKey) throw new Error("HD private key not initialized");
+    return this.#HDPrivateKey.derive(path).privKey;
   }
 
-  /**
-   * Parse a text of urn string into identity attributes
-   *
-   * urn:bap:id:name:John Doe:e2c6fb4063cc04af58935737eaffc938011dff546d47b7fbb18ed346f8c4d4fa
-   * urn:bap:id:birthday:1990-05-22:e61f23cbbb2284842d77965e2b0e32f0ca890b1894ca4ce652831347ee3596d9
-   * urn:bap:id:over18:1:480ca17ccaacd671b28dc811332525f2f2cd594d8e8e7825de515ce5d52d30e8
-   *
-   * @param urnIdentityAttributes
-   */
-  parseStringUrns(urnIdentityAttributes: string): IdentityAttributes {
-    const identityAttributes: IdentityAttributes = {};
-    // avoid forEach
-
-    const attributesRaw = urnIdentityAttributes
-      .replace(/^\s+/g, "")
-      .replace(/\r/gm, "")
-      .split("\n");
-
-    for (const line of attributesRaw) {
-      // remove any whitespace from the string (trim)
-      const attribute = line.replace(/^\s+/g, "").replace(/\s+$/g, "");
-      const urn = attribute.split(":");
-      if (
-        urn[0] === "urn" &&
-        urn[1] === "bap" &&
-        urn[2] === "id" &&
-        urn[3] &&
-        urn[4] &&
-        urn[5]
-      ) {
-        identityAttributes[urn[3]] = {
-          value: urn[4],
-          nonce: urn[5],
-        };
-      }
-    }
-
-    return identityAttributes;
-  }
-
-  /**
-   * Returns the identity key
-   *
-   * @returns {*|string}
-   */
-  getIdentityKey(): string {
-    return this.identityKey;
-  }
-
-  /**
-   * This should be called with the last part of the signing path (/.../.../...)
-   * This library assumes the first part is m/424150'/0'/0' as defined at the top of this file
-   *
-   * @param path The second path of the signing path in the format [0-9]{0,9}/[0-9]{0,9}/[0-9]{0,9}
-   */
   set rootPath(path: string) {
     if (this.#isType42) {
-      // Type 42 mode: use path directly as invoice number
       this.#rootPath = path;
-      
       if (!this.#masterPrivateKey) throw new Error("Master private key not initialized");
       const derivedKey = this.#masterPrivateKey.deriveChild(
         this.#masterPrivateKey.toPublicKey(),
-        path  // Use original path as invoice number
+        path
       );
       this.rootAddress = derivedKey.toPublicKey().toAddress();
-      
-      // For Type 42, paths don't need BIP32 formatting
       this.#previousPath = path;
       this.#currentPath = path;
     } else {
-      // BIP32 mode: validate and format HD path
       let pathToUse = path;
       if (path.split("/").length < 5) {
         pathToUse = `${SIGNING_PATH_PREFIX}${path}`;
       }
-
       if (!this.validatePath(pathToUse)) {
         throw new Error(`invalid signing path given ${pathToUse}`);
       }
-
       this.#rootPath = pathToUse;
-
       if (!this.#HDPrivateKey) throw new Error("HD private key not initialized");
       const derivedChild = this.#HDPrivateKey.derive(pathToUse);
       this.rootAddress = derivedChild.pubKey.toAddress();
-      
-      // Set paths for BIP32
       this.#previousPath = pathToUse;
       this.#currentPath = pathToUse;
     }
-
-    // Identity keys should be derivatives of the root address - this allows checking
-    // of the creation transaction
-    this.identityKey = this.deriveIdentityKey(this.rootAddress);
+    this.bapId = bapIdFromAddress(this.rootAddress);
   }
 
   get rootPath(): string {
     return this.#rootPath;
   }
 
-  getRootPath(): string {
-    return this.#rootPath;
-  }
-
-  /**
-   * This should be called with the last part of the signing path (/.../.../...)
-   * This library assumes the first part is m/424150'/0'/0' as defined at the top of this file
-   *
-   * @param path The second path of the signing path in the format [0-9]{0,9}/[0-9]{0,9}/[0-9]{0,9}
-   */
-  set currentPath(path) {
+  set currentPath(path: string) {
     if (this.#isType42) {
-      // Type 42 mode: use path directly as invoice number
       this.#previousPath = this.#currentPath;
       this.#currentPath = path;
     } else {
-      // BIP32 mode: validate and format HD path
       let pathToUse = path;
       if (path.split("/").length < 5) {
         pathToUse = `${SIGNING_PATH_PREFIX}${path}`;
       }
-
       if (!this.validatePath(pathToUse)) {
         throw new Error("invalid signing path given");
       }
-
       this.#previousPath = this.#currentPath;
       this.#currentPath = pathToUse;
     }
@@ -313,33 +156,11 @@ class MasterID extends BaseClass {
     return this.#previousPath;
   }
 
-  /**
-   * This can be used to break the deterministic way child keys are created to make it harder for
-   * an attacker to steal the identites when the root key is compromised. This does however require
-   * the seeds to be stored at all times. If the seed is lost, the identity will not be recoverable.
-   */
   get idSeed(): string {
     return this.#idSeed;
   }
 
-  /**
-   * Increment current path to a new path
-   *
-   * @returns {*}
-   */
-  incrementPath(): void {
-    this.currentPath = Utils.getNextPath(this.currentPath);
-  }
-
-  /**
-   * Check whether the given path is a valid path for use with this class
-   * The signing paths used here always have a length of 3
-   *
-   * @param path The last part of the signing path (example "/0/0/1")
-   * @returns {boolean}
-   */
-  validatePath(path: string) {
-    /* eslint-disable max-len */
+  validatePath(path: string): boolean {
     if (
       path.match(
         /\/[0-9]{1,10}'?\/[0-9]{1,10}'?\/[0-9]{1,10}'?\/[0-9]{1,10}'?\/[0-9]{1,10}'?\/[0-9]{1,10}'?/
@@ -358,556 +179,29 @@ class MasterID extends BaseClass {
         return true;
       }
     }
-
     return false;
   }
 
-  /**
-   * Get the OP_RETURN for the initial ID transaction (signed with root address)
-   *
-   * @returns {[]}
-   */
-  getInitialIdTransaction() {
-    return this.getIdTransaction(this.#rootPath);
-  }
-
-  /**
-   * Get the OP_RETURN for the ID transaction of the current address / path
-   *
-   * @returns {[]}
-   */
-  getIdTransaction(previousPath = "") {
-    if (this.#currentPath === this.#rootPath) {
-      throw new Error(
-        "Current path equals rootPath. ID was probably not initialized properly"
-      );
-    }
-
-    const opReturn = [
-      toArray(BAP_BITCOM_ADDRESS),
-      toArray("ID"),
-      toArray(this.identityKey),
-      toArray(this.getCurrentAddress()),
-    ];
-
-    return this.signOpReturnWithAIP(
-      opReturn,
-      previousPath || this.#previousPath
-    );
-  }
-
-  /**
-   * Get the path-derived private key before identity signing derivation.
-   *
-   * At rootPath this is the stable member key that defines the BAP ID.
-   * At currentPath this is the active wallet root used for signing/wallet operations.
-   */
-  private getPathDerivedKey(path: string): PrivateKey {
-    if (this.#isType42) {
-      if (!this.#masterPrivateKey) throw new Error("Master private key not initialized");
-      return this.#masterPrivateKey.deriveChild(
-        this.#masterPrivateKey.toPublicKey(),
-        path
-      );
-    }
-    if (!this.#HDPrivateKey) throw new Error("HD private key not initialized");
-    return this.#HDPrivateKey.derive(path).privKey;
-  }
-
-  /**
-   * Get the identity signing key for a given path
-   * This is derived from the path key using the BAP protocol pattern
-   */
-  private getIdentitySigningKeyForPath(path: string): PrivateKey {
-    const pathKey = this.getPathDerivedKey(path);
-    return pathKey.deriveChild(pathKey.toPublicKey(), BAP_INVOICE_NUMBER);
-  }
-
-  /**
-   * Get the stable member key's public key for this identity.
-   * This always resolves from rootPath and must not follow currentPath rotations.
-   */
-  public getMemberKey(): string {
-    return this.getPathDerivedKey(this.#rootPath).toPublicKey().toString();
-  }
-
-  /**
-   * Get the active wallet root private key for the given path.
-   * Defaults to currentPath, which follows key rotation.
-   */
-  public getWalletRoot(path?: string): PrivateKey {
-    return this.getPathDerivedKey(path || this.#currentPath);
-  }
-
-  /**
-   * Get the active wallet root public key for the given path.
-   * Defaults to currentPath, which follows key rotation.
-   */
-  public getWalletPubkey(path?: string): string {
-    return this.getWalletRoot(path).toPublicKey().toString();
-  }
-
-  /**
-   * Get the legacy (pre-signing-key-derivation) address for a path
-   * This is the address without the extra "1-sigma-identity" derivation
-   */
-  public getLegacyAddress(path?: string): string {
-    const pathToUse = path || this.#currentPath;
-    const pathKey = this.getPathDerivedKey(pathToUse);
-    return pathKey.toPublicKey().toAddress();
-  }
-
-  /**
-   * Check if the on-chain signing address uses legacy derivation
-   * @param registeredAddress The address registered on-chain (optional, defaults to rootAddress)
-   * @returns true if the registered address matches legacy derivation
-   */
-  public needsRotation(registeredAddress?: string): boolean {
-    const addressToCheck = registeredAddress || this.rootAddress;
-    const legacyAddress = this.getLegacyAddress(this.#rootPath);
-    return addressToCheck === legacyAddress;
-  }
-
-  /**
-   * Get OP_RETURN for migrating from legacy to new signing address derivation
-   * Signs with the LEGACY key to prove ownership of the old address
-   * Caller handles funding and broadcast
-   * @returns OP_RETURN data as number[][]
-   */
-  public getLegacyRotationTransaction(): number[][] {
-    // New address is the derived address at root path
-    const newAddress = this.getAddress(this.#rootPath);
-
-    const opReturn = [
-      toArray(BAP_BITCOM_ADDRESS),
-      toArray("ID"),
-      toArray(this.identityKey),
-      toArray(newAddress),
-    ];
-
-    // Must sign with LEGACY key (not the new derived key)
-    // to prove ownership of the old legacy address
-    const aipMessageBuffer = this.getAIPMessageBuffer(opReturn);
-    const legacyKey = this.getPathDerivedKey(this.#rootPath);
-    const { address, signature } = this.signWithBSM(aipMessageBuffer.flat(), legacyKey);
-
-    return this.formatAIPOutput(opReturn, address, signature);
-  }
-
-  /**
-   * Get address for given path
-   * Returns the identity signing address (derived from member key)
-   *
-   * @param path
-   * @returns {*}
-   */
-  getAddress(path: string): string {
-    // Get the identity signing key and return its address
-    const identitySigningKey = this.getIdentitySigningKeyForPath(path);
-    return identitySigningKey.toPublicKey().toAddress();
-  }
-
-  /**
-   * Get current signing address
-   *
-   * @returns {*}
-   */
-  getCurrentAddress(): string {
-    return this.getAddress(this.#currentPath);
-  }
-
-  /**
-   * Get the encryption key pair for this identity
-   */
-  getEncryptionKey(): { privKey: PrivateKey; pubKey: PublicKey } {
-    if (this.#isType42) {
-      if (!this.#masterPrivateKey) throw new Error("Master private key not initialized");
-      // First derive to root path, then to encryption path
-      const rootKey = this.#masterPrivateKey.deriveChild(
-        this.#masterPrivateKey.toPublicKey(),
-        this.#rootPath
-      );
-      const encryptionKey = rootKey.deriveChild(
-        rootKey.toPublicKey(),
-        ENCRYPTION_PATH
-      );
-      return {
-        privKey: encryptionKey,
-        pubKey: encryptionKey.toPublicKey(),
-      };
-    }
-      if (!this.#HDPrivateKey) throw new Error("HD private key not initialized");
-      const HDPrivateKey = this.#HDPrivateKey.derive(this.#rootPath);
-      const encryptionKey = HDPrivateKey.derive(ENCRYPTION_PATH).privKey;
-      return {
-        privKey: encryptionKey,
-        pubKey: encryptionKey.toPublicKey(),
-      };
-  }
-
-  /**
-   * Get the encryption key using type 42 (different key / incompatible with above)
-   * @deprecated Use getEncryptionKey() which now handles both BIP32 and Type 42
-   */
-  getEncryptionKeyType42(): { privKey: PrivateKey; pubKey: PublicKey } {
-    if (this.#isType42) {
-      // If already in Type 42 mode, just use the regular method
-      return this.getEncryptionKey();
-    }
-    
-    // Legacy behavior for BIP32 keys wanting Type 42 style derivation
-    if (!this.#HDPrivateKey) throw new Error("HD private key not initialized");
-    const HDPrivateKey = this.#HDPrivateKey.derive(this.#rootPath);
-    const encryptionKey = HDPrivateKey.privKey.deriveChild(
-      HDPrivateKey.toPublic().pubKey,
-      ENCRYPTION_PATH
-    );
-    return {
-      privKey: encryptionKey,
-      pubKey: encryptionKey.toPublicKey(),
-    };
-  }
-  /**
-   * Get the public key for encrypting data for this identity
-   */
-  getEncryptionPublicKey(): string {
-    const { pubKey } = this.getEncryptionKey();
-    return pubKey.toString();
-  }
-
-  /**
-   * Get the public key for encrypting data for this identity, using a seed for the encryption
-   */
-  getEncryptionPublicKeyWithSeed(seed: string): string {
-    const encryptionKey = this.getEncryptionPrivateKeyWithSeed(seed);
-    return encryptionKey.toPublicKey().toString();
-  }
-
-  /**
-   * Encrypt the given string data with the identity encryption key
-   * @param stringData
-   * @param counterPartyPublicKey Optional public key of the counterparty
-   * @return string Base64
-   */
-  encrypt(stringData: string, counterPartyPublicKey?: string): string {
-    const { privKey: encryptionKey, pubKey: publicKey } = this.getEncryptionKey();
-    const pubKey = counterPartyPublicKey
-      ? PublicKey.fromString(counterPartyPublicKey)
-      : publicKey;
-    return toBase64(electrumEncrypt(toArray(stringData), pubKey, encryptionKey));
-  }
-
-  /**
-   * Decrypt the given ciphertext with the identity encryption key
-   * @param ciphertext
-   */
-  decrypt(ciphertext: string, counterPartyPublicKey?: string): string {
-    const { privKey: encryptionKey } = this.getEncryptionKey();
-    let pubKey: PublicKey | undefined;
-    if (counterPartyPublicKey) {
-      pubKey = PublicKey.fromString(counterPartyPublicKey);
-    }
-    return toUTF8(
-      electrumDecrypt(toArray(ciphertext, "base64"), encryptionKey, pubKey)
-    );
-  }
-
-  /**
-   * Encrypt the given string data with the identity encryption key
-   * @param stringData
-   * @param seed String seed
-   * @param counterPartyPublicKey Optional public key of the counterparty
-   * @return string Base64
-   */
-  encryptWithSeed(
-    stringData: string,
-    seed: string,
-    counterPartyPublicKey?: string
-  ): string {
-    const encryptionKey = this.getEncryptionPrivateKeyWithSeed(seed);
-    const publicKey = encryptionKey.toPublicKey();
-    const pubKey = counterPartyPublicKey
-      ? PublicKey.fromString(counterPartyPublicKey)
-      : publicKey;
-    return toBase64(
-      electrumEncrypt(toArray(stringData), pubKey, encryptionKey)
-    );
-  }
-
-  /**
-   * Decrypt the given ciphertext with the identity encryption key
-   * @param ciphertext
-   * @param seed String seed
-  //  * @param counterPartyPublicKey Public key of the counterparty
-   */
-  decryptWithSeed(
-    ciphertext: string,
-    seed: string,
-    counterPartyPublicKey?: string
-  ): string {
-    const encryptionKey = this.getEncryptionPrivateKeyWithSeed(seed);
-    let pubKey: PublicKey | undefined;
-    if (counterPartyPublicKey) {
-      pubKey = PublicKey.fromString(counterPartyPublicKey);
-    }
-    return toUTF8(
-      electrumDecrypt(toArray(ciphertext, "base64"), encryptionKey, pubKey)
-    );
-  }
-
-  private getEncryptionPrivateKeyWithSeed(seed: string): PrivateKey {
-    const pathHex = toHex(Hash.sha256(seed, "utf8"));
-    
-    if (this.#isType42) {
-      if (!this.#masterPrivateKey) throw new Error("Master private key not initialized");
-      // First derive to root path
-      const rootKey = this.#masterPrivateKey.deriveChild(
-        this.#masterPrivateKey.toPublicKey(),
-        this.#rootPath
-      );
-      // Then derive with seed as invoice number
-      return rootKey.deriveChild(rootKey.toPublicKey(), pathHex);
-    }
-      if (!this.#HDPrivateKey) throw new Error("HD private key not initialized");
-      const path = Utils.getSigningPathFromHex(pathHex);
-      const HDPrivateKey = this.#HDPrivateKey.derive(this.#rootPath);
-      return HDPrivateKey.derive(path).privKey;
-  }
-
-  /**
-   * Get an attestation string for the given urn for this identity
-   *
-   * @param urn
-   * @returns {string}
-   */
-  getAttestation(urn: string) {
-    const urnHash = Hash.sha256(urn, "utf8");
-    return `bap:attest:${toHex(urnHash)}:${this.getIdentityKey()}`;
-  }
-
-  /**
-   * Generate and return the attestation hash for the given attribute of this identity
-   *
-   * @param attribute Attribute name (name, email etc.)
-   * @returns {string}
-   */
-  getAttestationHash(attribute: string) {
-    const urn = this.getAttributeUrn(attribute);
-    if (!urn) return null;
-
-    const attestation = this.getAttestation(urn);
-    const attestationHash = Hash.sha256(attestation, "utf8");
-
-    return toHex(attestationHash);
-  }
-
-  /**
-   * Sign a message with the current signing address of this identity
-   * Uses the derived identity signing key
-   *
-   * @param message
-   * @param signingPath
-   * @returns {{address: string, signature: string}}
-   */
-  signMessage(
-    message: number[],
-    signingPath?: string
-  ): { address: string; signature: string } {
-    const pathToUse = signingPath || this.#currentPath;
-    const signingKey = this.getIdentitySigningKeyForPath(pathToUse);
-    return this.signWithBSM(message, signingKey);
-  }
-
-  /**
-   * Sign a message using a key based on the given string seed
-   *
-   * This works by creating a private key from the root key of this identity. It will always
-   * work with the rootPath / rootKey, to be deterministic. It will not change even if the keys
-   * are rotated for this ID.
-   *
-   * This is used in for instance deterministic login systems, that do not support BAP.
-   * The signing address is derived from the seed-derived key.
-   *
-   * @param message
-   * @param seed {string} String seed that will be used to generate a path
-   */
-  signMessageWithSeed(
-    message: string,
-    seed: string
-  ): { address: string; signature: string } {
-    const pathHex = toHex(Hash.sha256(seed, "utf8"));
-    let seedDerivedKey: PrivateKey;
-
-    if (this.#isType42) {
-      if (!this.#masterPrivateKey) throw new Error("Master private key not initialized");
-      // First derive to root path
-      const rootKey = this.#masterPrivateKey.deriveChild(
-        this.#masterPrivateKey.toPublicKey(),
-        this.#rootPath
-      );
-      // Then derive with seed hex as invoice number
-      seedDerivedKey = rootKey.deriveChild(rootKey.toPublicKey(), pathHex);
-    } else {
-      if (!this.#HDPrivateKey) throw new Error("HD private key not initialized");
-      const path = Utils.getSigningPathFromHex(pathHex);
-      const HDPrivateKey = this.#HDPrivateKey.derive(this.#rootPath);
-      const derivedChild = HDPrivateKey.derive(path);
-      seedDerivedKey = derivedChild.privKey;
-    }
-
-    // Apply identity signing key derivation to the seed-derived key
-    const signingKey = seedDerivedKey.deriveChild(
-      seedDerivedKey.toPublicKey(),
-      BAP_INVOICE_NUMBER
-    );
-
-    return this.signWithBSM(toArray(message, "utf8"), signingKey);
-  }
-
-  /**
-   * Sign an op_return hex array with AIP
-   * @param opReturn {array}
-   * @param signingPath {string}
-   * @return {number[]}
-   */
-  signOpReturnWithAIP(opReturn: number[][], signingPath = ""): number[][] {
-    const aipMessageBuffer = this.getAIPMessageBuffer(opReturn);
-    const { address, signature } = this.signMessage(
-      aipMessageBuffer.flat(),
-      signingPath
-    );
-    return this.formatAIPOutput(opReturn, address, signature);
-  }
-
-  /**
-   * Get all signing keys for this identity
-   */
-  async getIdSigningKeys(): Promise<GetSigningKeysResponse> {
-    const signingKeys = await this.getApiData<GetSigningKeysResponse>(
-      "/signing-keys",
-      {
-        idKey: this.identityKey,
-      }
-    );
-    console.log("getIdSigningKeys", signingKeys);
-
-    return signingKeys;
-  }
-
-  /**
-   * Get all attestations for the given attribute
-   *
-   * @param attribute
-   */
-  async getAttributeAttestations(
-    attribute: string
-  ): Promise<GetAttestationResponse> {
-    // This function needs to make a call to a BAP server to get all the attestations for this
-    // identity for the given attribute
-    const attestationHash = this.getAttestationHash(attribute);
-
-    // get all BAP ATTEST records for the given attestationHash
-    const attestations = await this.getApiData<GetAttestationResponse>(
-      "/attestation/get",
-      {
-        hash: attestationHash,
-      }
-    );
-    console.log("getAttestations", attribute, attestationHash, attestations);
-
-    return attestations;
-  }
-
-  /**
-   * Import an identity from a JSON object
-   *
-   * @param identity{{}}
-   */
   import(identity: Identity | OldIdentity): void {
-    this.idName = identity.name;
-    this.description = identity.description || "";
-    this.identityKey = identity.identityKey;
+    this.bapId = "bapId" in identity ? identity.bapId : (identity as OldIdentity).identityKey;
     this.#rootPath = identity.rootPath;
     this.rootAddress = identity.rootAddress;
     this.#previousPath = identity.previousPath;
     this.#currentPath = identity.currentPath;
     this.#idSeed = ("idSeed" in identity ? identity.idSeed : "") || "";
-    this.identityAttributes = this.parseAttributes(identity.identityAttributes);
   }
 
-  /**
-   * Export this identity to a JSON object
-   * @returns {{}}
-   */
   export(): Identity {
     return {
-      name: this.idName,
-      description: this.description,
-      identityKey: this.identityKey,
+      bapId: this.bapId,
       rootPath: this.#rootPath,
       rootAddress: this.rootAddress,
       previousPath: this.#previousPath,
       currentPath: this.#currentPath,
       idSeed: this.#idSeed,
-      identityAttributes: this.getAttributes(),
       lastIdPath: "",
     };
   }
-
-  exportMemberBackup(): MemberIdentity {
-    const memberKey = this.getPathDerivedKey(this.#currentPath);
-    const counter = 0;
-    // Derive address using the same path MemberID uses:
-    // memberKey → bap:{counter} → BAP_INVOICE_NUMBER
-    const currentKey = memberKey.deriveChild(memberKey.toPublicKey(), `bap:${counter}`);
-    const signingKey = currentKey.deriveChild(currentKey.toPublicKey(), BAP_INVOICE_NUMBER);
-
-    return {
-      name: this.idName,
-      description: this.description,
-      derivedPrivateKey: memberKey.toWif(),
-      address: signingKey.toPublicKey().toAddress(),
-      identityAttributes: this.getAttributes(),
-      identityKey: this.identityKey,
-      counter,
-    };
-  }
-
-  // Derive a new member ID from the master HD key
-  // The path-derived key becomes the MemberID's key (member root)
-  // MemberID handles signing key derivation internally
-  public newId(): MemberID {
-    // Assuming incrementPath updates the internal current path
-    this.incrementPath();
-
-    // Get the path-derived key (member key)
-    const derivedKey = this.getPathDerivedKey(this.#currentPath);
-
-    return new MemberID(derivedKey);
-  }
-
-  /**
-   * Export member data in bitcoin-backup compatible format
-   * @returns Object with wif and encrypted member data
-   */
-  exportMember(): { wif: string; encryptedData: string } {
-    const memberExport = this.exportMemberBackup();
-
-    // Get the path-derived key (member key)
-    const derivedKey = this.getPathDerivedKey(this.#currentPath);
-
-    // Encrypt the member data using ECIES
-    const encryptedData = toBase64(
-      electrumEncrypt(
-        toArray(JSON.stringify(memberExport)),
-        derivedKey.toPublicKey()
-      )
-    );
-
-    return {
-      wif: memberExport.derivedPrivateKey,
-      encryptedData,
-    };
-  }
 }
+
 export { MasterID };

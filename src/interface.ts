@@ -6,40 +6,31 @@ export type IdentityAttribute = Record<
 export interface IdentityAttributes {
   [key: string]: IdentityAttribute;
 }
-// Base identity properties shared between old and new formats
-export interface BaseIdentity {
-  name: string;
-  description: string;
+
+// Identity as stored in the master backup's ids blob
+export interface Identity {
+  bapId: string;
+  rootPath: string;
+  rootAddress: string;
+  currentPath: string;
+  previousPath: string;
+  lastIdPath: string;
+  idSeed: string;
+}
+
+// Old format for backward compatibility during import
+export interface OldIdentity {
+  name?: string;
+  description?: string;
   identityKey: string;
   rootPath: string;
   rootAddress: string;
   currentPath: string;
   previousPath: string;
-  identityAttributes: IdentityAttributes;
-}
-
-// Old format - array of identities with no container
-export interface OldIdentity extends BaseIdentity {
-  idSeed?: string; // Optional in old format
-}
-
-// New format - identity objects within container.
-export interface Identity extends BaseIdentity {
-  lastIdPath: string;
-  idSeed: string;
-}
-
-export interface MemberIdentity {
-  name: string;
-  description: string;
-  derivedPrivateKey: string;
-  address: string;
-  identityKey: string;
+  idSeed?: string;
   identityAttributes?: IdentityAttributes;
-  counter?: number;
 }
 
-// New format container structure
 export interface Identities {
   lastIdPath: string;
   ids: Identity[];

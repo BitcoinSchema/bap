@@ -8,19 +8,7 @@ export const AIP_BITCOM_ADDRESS_HEX = toHex(toArray(AIP_BITCOM_ADDRESS));
 export const BAP_SERVER = "https://api.sigmaidentity.com/v1";
 export const MAX_INT = 2147483648 - 1; // 0x80000000
 
-// This is just a choice for this library and could be anything else if so needed/wanted
-// but it is advisable to use the same derivation between libraries for compatibility
 export const SIGNING_PATH_PREFIX = "m/424150'/0'/0'"; // BAP in hex
+
+// Used by the BAP class for encrypting the identity list in the master backup
 export const ENCRYPTION_PATH = `m/424150'/${MAX_INT}'/${MAX_INT}'`;
-
-// BAP identity signing key derivation constants
-// Uses Type 42 (BRC-42) derivation pattern: invoiceNumber = `${securityLevel}-${protocolName}-${keyID}`
-export const BAP_PROTOCOL_ID: [1, string] = [1, "sigma"];
-export const BAP_KEY_ID = "identity";
-export const BAP_INVOICE_NUMBER = "1-sigma-identity"; // Pre-computed for Type42 deriveChild
-
-// Friend encryption key derivation constants
-// Security level 2: counterparty-specific keys requiring user approval
-// Format: `2-friend-${sha256(friendBapId)}`
-export const FRIEND_SECURITY_LEVEL = 2;
-export const FRIEND_PROTOCOL = "friend";

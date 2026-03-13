@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.2.0-alpha.0] - 2026-03-13
+
+### Changed
+- **Breaking:** BAP library redesigned around identity lifecycle only. Signing, encryption, rotation, and profile management delegated to BRC-100 wallet.
+- `MemberID` replaced by `AccountID` — holds account key, signs create/revoke transactions only
+- `MasterID` stripped to account derivation and backup serialization — no signing, no encryption, no attributes
+- `BaseClass` stripped to BSM signing and AIP formatting — no encryption methods
+- `identityKey` renamed to `bapId` throughout
+- `Identity` interface reduced to path/address fields — attributes stored in wallet
+- `newId()` simplified — no longer accepts identity attributes
+
+### Removed
+- `MemberID` class (replaced by `AccountID`)
+- `MemberIdentity` interface
+- Signing key derivation (`BAP_INVOICE_NUMBER`, `BAP_KEY_ID`, `BAP_PROTOCOL_ID`)
+- Encryption methods on `BaseClass` and `MasterID` (master-level encrypt/decrypt for backup blob retained on BAP class)
+- `ENCRYPTION_PATH` derivation on identity level
+- `incrementPath()`, `rotate()`, counter management
+- `exportMember()`, `exportForBackup()`, `fromBackup()` on identity level
+- `exportMemberForBackup()` on BAP class
+- All friend encryption methods
+- Attribute management on `MasterID` (moved to wallet)
+
+### Added
+- `AccountID` class: `getBapId()`, `getRootAddress()`, `getRootPublicKey()`, `getInitialIdTransaction()`, `getRevocationTransaction()`
+- `BAP.getAccountId(bapId)` — creates AccountID from master-derived account key
+
 ## [0.1.24] - 2026-03-13
 
 ### Changed
