@@ -449,7 +449,7 @@ class MasterID extends BaseClass {
 
   /**
    * Get the legacy (pre-signing-key-derivation) address for a path
-   * This is the address without the extra "1-bap-identity" derivation
+   * This is the address without the extra "1-sigma-identity" derivation
    */
   public getLegacyAddress(path?: string): string {
     const pathToUse = path || this.#currentPath;
@@ -854,22 +854,22 @@ class MasterID extends BaseClass {
     };
   }
 
-  // Export a member-friendly backup, containing only the derived member key
-  // The derivedPrivateKey is the member key (root for signing key derivation)
-  // The address is the derived identity signing address
   exportMemberBackup(): MemberIdentity {
-    // Get the path-derived key (member key)
-    const derivedKey = this.getPathDerivedKey(this.#currentPath);
-    // Get the derived identity signing key for the address
-    const identitySigningKey = this.getIdentitySigningKeyForPath(this.#currentPath);
+    const memberKey = this.getPathDerivedKey(this.#currentPath);
+    const counter = 0;
+    // Derive address using the same path MemberID uses:
+    // memberKey → bap:{counter} → BAP_INVOICE_NUMBER
+    const currentKey = memberKey.deriveChild(memberKey.toPublicKey(), `bap:${counter}`);
+    const signingKey = currentKey.deriveChild(currentKey.toPublicKey(), BAP_INVOICE_NUMBER);
 
     return {
       name: this.idName,
       description: this.description,
-      derivedPrivateKey: derivedKey.toWif(),
-      address: identitySigningKey.toPublicKey().toAddress(),
+      derivedPrivateKey: memberKey.toWif(),
+      address: signingKey.toPublicKey().toAddress(),
       identityAttributes: this.getAttributes(),
       identityKey: this.identityKey,
+      counter,
     };
   }
 

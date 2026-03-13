@@ -17,13 +17,13 @@ export class MemberID extends BaseClass {
   public description: string;
   public address: string;
   public identityKey: string;
+  private counter: number;
 
-  constructor(key: PrivateKey, identityAttributes: IdentityAttributes = {}) {
+  constructor(key: PrivateKey, identityAttributes: IdentityAttributes = {}, counter = 0) {
     super();
     this.key = key;
-    // Address is derived from the identity signing key
-    // The member key is the root, signing address is derived one level deeper
-    this.address = this.getIdentitySigningKey().toPublicKey().toAddress();
+    this.counter = counter;
+    this.address = this.getSigningKey().toPublicKey().toAddress();
     this.idName = "Member ID 1";
     this.description = "";
     this.identityKey = "";
@@ -31,12 +31,20 @@ export class MemberID extends BaseClass {
   }
 
   /**
-   * Get the derived identity signing key
-   * This is derived from the member key using the BAP protocol pattern
-   * invoiceNumber = "1-bap-identity" (securityLevel-protocolName-keyID)
+   * Get the current BRC-100 wallet root key
+   * Derived from member key using the rotation counter
    */
-  private getIdentitySigningKey(): PrivateKey {
-    return this.key.deriveChild(this.key.toPublicKey(), BAP_INVOICE_NUMBER);
+  public getCurrentKey(): PrivateKey {
+    return this.key.deriveChild(this.key.toPublicKey(), `bap:${this.counter}`);
+  }
+
+  /**
+   * Get the signing key derived from the current wallet root
+   * currentKey → Type42("1-sigma-identity") → signingKey
+   */
+  public getSigningKey(): PrivateKey {
+    const currentKey = this.getCurrentKey();
+    return currentKey.deriveChild(currentKey.toPublicKey(), BAP_INVOICE_NUMBER);
   }
 
   /**
@@ -49,49 +57,78 @@ export class MemberID extends BaseClass {
   }
 
   /**
-   * Get the legacy (pre-signing-key-derivation) address
-   * This is the address without the extra "1-bap-identity" derivation
+   * Get the root address (the member key's address)
+   * This is the address used for identity publication and BAP ID derivation
    */
-  public getLegacyAddress(): string {
+  public getRootAddress(): string {
     return this.key.toPublicKey().toAddress();
   }
 
-  // Implement the abstract signMessage method from BaseClass
-  // Signs with the derived identity signing key
+  // Signs with the signing key (current key → BAP_INVOICE_NUMBER derivation)
   public signMessage(
     message: number[],
     _signingPath?: string
   ): { address: string; signature: string } {
-    const signingKey = this.getIdentitySigningKey();
-    return this.signWithBSM(message, signingKey);
+    return this.signWithBSM(message, this.getSigningKey());
   }
 
-  // Implement signOpReturnWithAIP - MemberID ignores signing path
+  /**
+   * Sign with the root key (member key directly)
+   * Used for identity publication and key rotation transactions
+   */
+  public signMessageWithRootKey(
+    message: number[]
+  ): { address: string; signature: string } {
+    return this.signWithBSM(message, this.key);
+  }
+
+  /**
+   * Sign OP_RETURN with AIP using the root key
+   * Used for identity publication transactions
+   */
+  public signOpReturnWithAIPUsingRootKey(opReturn: number[][]): number[][] {
+    const aipMessageBuffer = this.getAIPMessageBuffer(opReturn);
+    const { address, signature } = this.signMessageWithRootKey(aipMessageBuffer.flat());
+    return this.formatAIPOutput(aipMessageBuffer, address, signature);
+  }
+
+  // Sign OP_RETURN with AIP using the signing key
   public signOpReturnWithAIP(opReturn: number[][]): number[][] {
     const aipMessageBuffer = this.getAIPMessageBuffer(opReturn);
     const { address, signature } = this.signMessage(aipMessageBuffer.flat());
     return this.formatAIPOutput(aipMessageBuffer, address, signature);
   }
 
-  // Return the derived identity signing public key
-  // This matches the address used for on-chain operations
+  // Return the signing public key
   public getPublicKey(): string {
-    return this.getIdentitySigningKey().toPublicKey().toString();
+    return this.getSigningKey().toPublicKey().toString();
   }
 
-  // Import the member identity from an object containing the derived private key and identity data
+  public getCounter(): number {
+    return this.counter;
+  }
+
+  /**
+   * Increment the rotation counter
+   * This changes the current key and signing key
+   */
+  public rotate(): void {
+    this.counter++;
+    this.address = this.getSigningKey().toPublicKey().toAddress();
+  }
+
   public import(identity: MemberIdentity): void {
     this.idName = identity.name;
     this.description = identity.description;
     this.key = PrivateKey.fromWif(identity.derivedPrivateKey);
-    // Address is derived from the identity signing key
-    this.address = this.getIdentitySigningKey().toPublicKey().toAddress();
+    this.counter = identity.counter ?? 0;
+    this.address = this.getSigningKey().toPublicKey().toAddress();
     this.identityAttributes = identity.identityAttributes || {};
     this.identityKey = identity.identityKey;
   }
 
   static fromMemberIdentity(identity: MemberIdentity): MemberID {
-    const member = new MemberID(PrivateKey.fromWif(identity.derivedPrivateKey));
+    const member = new MemberID(PrivateKey.fromWif(identity.derivedPrivateKey), {}, identity.counter ?? 0);
     member.import(identity);
     return member;
   }
@@ -104,7 +141,6 @@ export class MemberID extends BaseClass {
     return member;
   }
 
-  // Export the member identity as an object containing the derived private key and identity data
   public export(): MemberIdentity {
     return {
       name: this.idName,
@@ -113,6 +149,7 @@ export class MemberID extends BaseClass {
       address: this.address,
       identityAttributes: this.getAttributes(),
       identityKey: this.identityKey,
+      counter: this.counter,
     };
   }
 

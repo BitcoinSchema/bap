@@ -36,6 +36,7 @@ export interface MemberIdentity {
   address: string;
   identityKey: string;
   identityAttributes?: IdentityAttributes;
+  counter?: number;
 }
 
 // New format container structure

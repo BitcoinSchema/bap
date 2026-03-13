@@ -82,16 +82,16 @@ describe("Migration Support", () => {
     expect(legacyAddr).not.toBe(currentAddr);
   });
 
-  test("MemberID getLegacyAddress returns direct address", () => {
+  test("MemberID getRootAddress returns member key address", () => {
     const key = PrivateKey.fromRandom();
     const member = new MemberID(key);
 
-    const legacyAddr = member.getLegacyAddress();
-    const currentAddr = member.address;
+    const rootAddr = member.getRootAddress();
+    const signingAddr = member.address;
 
-    // Legacy and current should be different
-    expect(legacyAddr).not.toBe(currentAddr);
-    // Legacy should be direct from member key
-    expect(legacyAddr).toBe(key.toPublicKey().toAddress());
+    // Root and signing should be different (signing has two derivation levels)
+    expect(rootAddr).not.toBe(signingAddr);
+    // Root should be direct from member key
+    expect(rootAddr).toBe(key.toPublicKey().toAddress());
   });
 });

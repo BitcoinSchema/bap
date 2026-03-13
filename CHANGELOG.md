@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.1.24] - 2026-03-13
+
+### Changed
+- **Breaking:** `BAP_PROTOCOL_ID` changed from `[1, "bap"]` to `[1, "sigma"]`; `BAP_INVOICE_NUMBER` from `"1-bap-identity"` to `"1-sigma-identity"`
+- `MemberID` now uses counter-based two-level key derivation: member → `bap:{counter}` → `1-sigma-identity`
+- `MasterID.exportMemberBackup()` includes `counter` and computes address using two-level derivation
+- Renamed `MemberID.getLegacyAddress()` to `getRootAddress()`
+- Renamed internal `getIdentitySigningKey()` to public `getSigningKey()`
+
+### Added
+- `MemberID.getCurrentKey()` — derives BRC-100 wallet root from member key via counter
+- `MemberID.getSigningKey()` — derives signing key from current key
+- `MemberID.signMessageWithRootKey()` / `signOpReturnWithAIPUsingRootKey()` — sign with member key directly (for identity publication)
+- `MemberID.rotate()` — increments counter, updates signing address
+- `MemberID.getCounter()` — accessor for rotation counter
+- `counter` field on `MemberIdentity` interface
+
 ## [0.1.23] - 2026-03-08
 
 ### Added
