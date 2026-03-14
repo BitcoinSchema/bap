@@ -1,5 +1,5 @@
 import { expect, test, describe } from "bun:test";
-import { BAP, AccountID } from "../src/index";
+import { BAP } from "../src/index";
 import { HD } from "@bsv/sdk";
 
 describe("Type 42 support in BAP", () => {
@@ -72,15 +72,6 @@ describe("Type 42 support in BAP", () => {
       expect(id).toBeDefined();
       expect(id.bapId).toBeDefined();
       expect(id.rootAddress).toBeDefined();
-    });
-
-    test("should create AccountID from Type 42 identity", () => {
-      const bap = new BAP({ rootPk: testWif });
-      const masterId = bap.newId();
-      const accountId = bap.getAccountId(masterId.bapId);
-
-      expect(accountId).toBeInstanceOf(AccountID);
-      expect(accountId!.getBapId()).toBe(masterId.bapId);
     });
 
     test("Type 42 counter-based IDs are unique", () => {

@@ -78,26 +78,6 @@ class MasterID {
     this.bapId = bapIdFromAddress(this.rootAddress);
   }
 
-  /**
-   * Get the account key (root key) for this identity.
-   * This is the cold key used for BAP ID creation and revocation.
-   */
-  getAccountKey(): PrivateKey {
-    return this.getPathDerivedKey(this.#rootPath);
-  }
-
-  private getPathDerivedKey(path: string): PrivateKey {
-    if (this.#isType42) {
-      if (!this.#masterPrivateKey) throw new Error("Master private key not initialized");
-      return this.#masterPrivateKey.deriveChild(
-        this.#masterPrivateKey.toPublicKey(),
-        path
-      );
-    }
-    if (!this.#HDPrivateKey) throw new Error("HD private key not initialized");
-    return this.#HDPrivateKey.derive(path).privKey;
-  }
-
   set rootPath(path: string) {
     if (this.#isType42) {
       this.#rootPath = path;

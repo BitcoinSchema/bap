@@ -7,7 +7,7 @@ import {
   type Signature,
   Utils,
 } from "@bsv/sdk";
-import { BAP, AccountID } from "../src";
+import { BAP } from "../src";
 import { ENCRYPTION_PATH, SIGNING_PATH_PREFIX } from "../src/constants";
 import { MasterID } from "../src/MasterID";
 import type { Identities, OldIdentity } from "../src/interface";
@@ -182,21 +182,6 @@ describe("BAP class", () => {
 
     const bap = new BAP(HDPrivateKey);
     expect(bap.verifySignature(message, address, signature)).toBe(true);
-  });
-
-  test("getAccountId returns AccountID for existing identity", () => {
-    const bap = new BAP(HDPrivateKey);
-    const masterId = bap.newId();
-    const accountId = bap.getAccountId(masterId.bapId);
-
-    expect(accountId).toBeInstanceOf(AccountID);
-    expect(accountId?.getBapId()).toBe(masterId.bapId);
-    expect(accountId?.getRootAddress()).toBe(masterId.rootAddress);
-  });
-
-  test("getAccountId returns null for unknown BAP ID", () => {
-    const bap = new BAP(HDPrivateKey);
-    expect(bap.getAccountId("nonexistent")).toBeNull();
   });
 
   test("exportForBackup BIP32", () => {

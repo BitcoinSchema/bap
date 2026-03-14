@@ -18,13 +18,11 @@ import type {
 } from "./apiTypes";
 import {
   AIP_BITCOM_ADDRESS,
-  BAP_BITCOM_ADDRESS,
   BAP_BITCOM_ADDRESS_HEX,
   BAP_SERVER,
   ENCRYPTION_PATH,
 } from "./constants";
 import { MasterID } from "./MasterID";
-import { AccountID } from "./AccountID";
 import type {
   Attestation,
   Identity,
@@ -224,16 +222,6 @@ export class BAP {
     return this.#ids[bapId] || null;
   }
 
-  /**
-   * Get an AccountID for the given BAP ID.
-   * The AccountID holds the account key and can sign create/revoke transactions.
-   */
-  getAccountId(bapId: string): AccountID | null {
-    const masterId = this.#ids[bapId];
-    if (!masterId) return null;
-    return new AccountID(masterId.getAccountKey());
-  }
-
   setId(bapId: MasterID): void {
     this.checkIdBelongs(bapId);
     this.#ids[bapId.bapId] = bapId;
@@ -356,7 +344,6 @@ export class BAP {
     return idData;
   }
 
-  // Master-level encryption for the ids blob in the backup
   encrypt(string: string): string {
     if (this.#isType42) {
       if (!this.#masterPrivateKey) throw new Error("Master private key not initialized");
@@ -392,33 +379,6 @@ export class BAP {
     const derivedChild = this.#HDPrivateKey.derive(ENCRYPTION_PATH);
     return toUTF8(
       electrumDecrypt(toArray(string, "base64"), derivedChild.privKey)
-    );
-  }
-
-  signAttestationWithAIP(
-    attestationHash: string,
-    bapId: string,
-    counter = 0,
-    dataString = ""
-  ) {
-    const id = this.getId(bapId);
-    if (!id) throw new Error("Could not find identity to attest with");
-
-    // Attestation signing now needs to go through the wallet.
-    // This method builds the transaction data but signing should be
-    // delegated to the BRC-100 wallet in the calling code.
-    const attestationBuffer = this.getAttestationBuffer(
-      attestationHash,
-      counter,
-      dataString
-    );
-
-    return this.createAttestationTransaction(
-      attestationHash,
-      counter,
-      "", // address — caller must provide from wallet
-      "", // signature — caller must provide from wallet
-      dataString
     );
   }
 
@@ -459,69 +419,6 @@ export class BAP {
     }
 
     return attestation;
-  }
-
-  createAttestationTransaction(
-    attestationHash: string,
-    counter: number,
-    address: string,
-    signature: string,
-    dataString = ""
-  ): number[][] {
-    const elements: number[][] = [
-      [OP.OP_RETURN],
-      toArray(BAP_BITCOM_ADDRESS),
-      toArray("ATTEST"),
-      toArray(attestationHash),
-      toArray(`${counter}`),
-      toArray("|"),
-    ];
-
-    if (dataString) {
-      elements.push(
-        toArray(BAP_BITCOM_ADDRESS),
-        toArray("DATA"),
-        toArray(attestationHash),
-        toArray(dataString),
-        toArray("|")
-      );
-    }
-
-    elements.push(
-      toArray(AIP_BITCOM_ADDRESS),
-      toArray("BITCOIN_ECDSA"),
-      toArray(address),
-      toArray(signature, "base64")
-    );
-
-    return elements;
-  }
-
-  getAttestationBuffer(
-    attestationHash: string,
-    counter = 0,
-    dataString = ""
-  ): number[] {
-    const elements = [
-      [OP.OP_RETURN],
-      toArray(BAP_BITCOM_ADDRESS),
-      toArray("ATTEST"),
-      toArray(attestationHash),
-      toArray(`${counter}`),
-      toArray("|"),
-    ];
-
-    if (dataString) {
-      elements.push(
-        toArray(BAP_BITCOM_ADDRESS),
-        toArray("DATA"),
-        toArray(attestationHash),
-        toArray(dataString),
-        toArray("|")
-      );
-    }
-
-    return elements.flat();
   }
 
   verifySignature(
@@ -623,7 +520,7 @@ export class BAP {
   }
 }
 
-export { MasterID, AccountID };
+export { MasterID };
 export { bapIdFromAddress, bapIdFromPubkey } from "./utils";
 export type {
   Attestation,
