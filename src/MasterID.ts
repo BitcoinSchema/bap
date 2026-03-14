@@ -140,6 +140,15 @@ class MasterID {
     return this.#idSeed;
   }
 
+  getAccountKey(): PrivateKey {
+    if (this.#isType42) {
+      if (!this.#masterPrivateKey) throw new Error("Master private key not initialized");
+      return this.#masterPrivateKey;
+    }
+    if (!this.#HDPrivateKey) throw new Error("HD private key not initialized");
+    return this.#HDPrivateKey.privKey;
+  }
+
   validatePath(path: string): boolean {
     if (
       path.match(
