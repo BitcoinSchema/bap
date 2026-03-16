@@ -17,13 +17,13 @@ No servers, no accounts, no intermediaries. Your identity is pure mathematics.
 
 ## 0.2.0 Architecture
 
-BAP 0.2.0 is an **identity-only** library designed for BRC-100 wallet delegation:
+BAP 0.2.0 is a focused **identity-only** library. It manages key derivation and identity lifecycle — nothing else:
 
 - **`BAP` class** - Master key management, identity CRUD, crypto operations, API lookups
 - **`MasterID` class** - Individual identity with key derivation and path management
-- **No signing keys, no attributes, no transactions** - Wallets handle those via BRC-100
+- **No signing, no attributes, no transactions** - Those concerns belong to your application or wallet
 
-This separation means BAP manages *who you are* while your wallet manages *what you do*.
+BAP manages *who you are*. Your application decides *what you do* with that identity. Works naturally with BRC-100 wallets, but is not coupled to any specific wallet implementation.
 
 ## Installation
 
@@ -158,7 +158,7 @@ identity.idSeed: string      // Seed used for sub-derivation
 #### Methods
 
 ```typescript
-// Get the account-level private key (for BRC-100 wallet delegation)
+// Get the account-level private key
 identity.getAccountKey(): PrivateKey
 
 // Export identity state
@@ -315,7 +315,7 @@ bap create --name "Work"
 bap list
 bap use <work-bap-id>
 
-# Export account for a BRC-100 wallet
+# Export account key for use in a wallet
 bap export-account > account.json
 
 # Lookup someone on the network
@@ -336,9 +336,9 @@ cat note.enc | xargs bap decrypt
 | `identity.getIdentityKey()` | `identity.bapId` | Now a property |
 | `identity.idName` | Removed | Use external labels |
 | `identity.setAttribute()` | Removed | Attributes removed from core |
-| `identity.signMessage()` | Removed | Use BRC-100 wallet |
+| `identity.signMessage()` | Removed | Use your wallet |
 | `identity.encrypt/decrypt()` | Removed from MasterID | Use `bap.encrypt/decrypt()` for master-level |
-| `identity.getEncryptionPublicKey()` | Removed | Use BRC-100 wallet |
+| `identity.getEncryptionPublicKey()` | Removed | Use your wallet |
 | `identity.getCurrentAddress()` | Removed | Use `identity.getAccountKey()` |
 | `MemberID` class | Removed | Use `identity.exportAccountBackup()` |
 | `exportMemberBackup()` | `exportAccountBackup()` | Returns `{ wif, id }` |
@@ -355,7 +355,7 @@ const { address, signature } = identity.signMessage(msg);
 // 0.2.0
 const identity = bap.newId();
 const key = identity.bapId;
-const accountKey = identity.getAccountKey(); // PrivateKey for BRC-100 wallet
+const accountKey = identity.getAccountKey(); // PrivateKey for wallet use
 const backup = identity.exportAccountBackup(); // { wif, id }
 ```
 
