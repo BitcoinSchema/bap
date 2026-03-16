@@ -61,6 +61,12 @@ async function resolveRootKey(config: StoredConfig): Promise<string> {
     return unlockRootKey(config.rootPkEncrypted);
   }
 
+  // Legacy format: older BAP configs used "wif" instead of "rootPk"
+  const legacy = config as Record<string, unknown>;
+  if (typeof legacy.wif === "string") {
+    return legacy.wif;
+  }
+
   throw new Error(
     "Config has neither rootPk nor rootPkEncrypted. File may be corrupt."
   );
@@ -132,7 +138,7 @@ function getActiveIdentity(bap: BAP, config: StoredConfig) {
     console.error(`Identity ${bapId} not found.`);
     process.exit(1);
   }
-  return { identity, bapId, label: config.labels[bapId] };
+  return { identity, bapId, label: config.labels?.[bapId] };
 }
 
 /**
@@ -260,7 +266,7 @@ program
 
     for (const bapId of ids) {
       const marker = bapId === active ? " *" : "  ";
-      const label = config.labels[bapId];
+      const label = config.labels?.[bapId];
       const suffix = label ? ` (${label})` : "";
       console.log(`${marker} ${bapId}${suffix}`);
     }
@@ -315,7 +321,7 @@ program
     }
 
     bap.removeId(bapId);
-    delete config.labels[bapId];
+    if (config.labels) delete config.labels[bapId];
 
     // Preserve Touch ID protection state
     const encrypted = config.rootPkEncrypted
@@ -568,9 +574,11 @@ touchid
       return;
     }
 
-    if (!config.rootPk) {
+    // Support legacy "wif" field from older BAP configs
+    const plainKey = config.rootPk ?? (config as Record<string, unknown>).wif as string | undefined;
+    if (!plainKey) {
       console.error(
-        "Config has no plaintext rootPk to protect. File may be corrupt."
+        "Config has no plaintext key to protect. File may be corrupt."
       );
       process.exit(1);
     }
@@ -591,7 +599,7 @@ touchid
     }
 
     console.log("Encrypting identity key with Secure Enclave...");
-    const rootPkEncrypted = await protectRootKey(config.rootPk);
+    const rootPkEncrypted = await protectRootKey(plainKey);
 
     // Rewrite config: replace rootPk with rootPkEncrypted (sentinel "se:bap-master")
     const newConfig: StoredConfig = {
