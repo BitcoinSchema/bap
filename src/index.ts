@@ -25,6 +25,7 @@ import {
 import { MasterID } from "./MasterID";
 import type {
   Attestation,
+  BapAccountBackup,
   Identity,
   OldIdentity,
   PathPrefix,
@@ -524,6 +525,7 @@ export { MasterID };
 export { bapIdFromAddress, bapIdFromPubkey } from "./utils";
 export type {
   Attestation,
+  BapAccountBackup,
   Identity,
   PathPrefix,
   Type42Params,
