@@ -50,7 +50,7 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@1sat/vault": "file:../1sat-sdk/packages/vault",
+    "@1sat/vault": "^0.0.1",
     "commander": "^14.0.3",
     "schema-dts": "^1.1.5"
   },
