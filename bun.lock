@@ -5,7 +5,7 @@
     "": {
       "name": "bsv-bap",
       "dependencies": {
-        "@1sat/vault": "^0.0.1",
+        "@1sat/vault": "0.0.2",
         "commander": "^14.0.3",
         "schema-dts": "^1.1.5",
       },
@@ -25,7 +25,7 @@
     "@1sat/vault",
   ],
   "packages": {
-    "@1sat/vault": ["@1sat/vault@0.0.1", "", {}, "sha512-QNMBP6IYYBgTlVNAFr/r+yJ4o6BBJos7KUJUmDgq2LpkntLJY2i5YupUmi+4w/A7oZBqFj/Eg6gSXEj2q++MGQ=="],
+    "@1sat/vault": ["@1sat/vault@0.0.2", "", {}, "sha512-/in0cxxUeG+kt7ei3oF+nca8ZizoXBrgz+M0oqCLntxd5LU9oqTympxK/8dvG36mcxnc4SfJW69kOcP5elzUmQ=="],
 
     "@biomejs/biome": ["@biomejs/biome@2.0.0", "", { "optionalDependencies": { "@biomejs/cli-darwin-arm64": "2.0.0", "@biomejs/cli-darwin-x64": "2.0.0", "@biomejs/cli-linux-arm64": "2.0.0", "@biomejs/cli-linux-arm64-musl": "2.0.0", "@biomejs/cli-linux-x64": "2.0.0", "@biomejs/cli-linux-x64-musl": "2.0.0", "@biomejs/cli-win32-arm64": "2.0.0", "@biomejs/cli-win32-x64": "2.0.0" }, "bin": { "biome": "bin/biome" } }, "sha512-BlUoXEOI/UQTDEj/pVfnkMo8SrZw3oOWBDrXYFT43V7HTkIUDkBRY53IC5Jx1QkZbaB+0ai1wJIfYwp9+qaJTQ=="],
 
