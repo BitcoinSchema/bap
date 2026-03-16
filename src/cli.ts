@@ -30,13 +30,21 @@ function loadConfig(): StoredConfig | null {
 	return JSON.parse(readFileSync(CONFIG_FILE, "utf-8")) as StoredConfig;
 }
 
+function createBAP(key: string): BAP {
+	// xprv keys start with "xprv" — use BIP32 mode; otherwise Type42
+	if (key.startsWith("xprv")) {
+		return new BAP(key);
+	}
+	return new BAP({ rootPk: key });
+}
+
 function loadBAP(): { bap: BAP; config: StoredConfig } {
 	const config = loadConfig();
 	if (!config) {
 		console.error("No identity found. Run 'bap create' first.");
 		process.exit(1);
 	}
-	const bap = new BAP({ rootPk: config.rootPk });
+	const bap = createBAP(config.rootPk);
 	if (config.ids) {
 		bap.importIds(config.ids);
 	}
@@ -115,13 +123,13 @@ program
 			rootPk = config.rootPk;
 			labels = config.labels;
 			createdAt = config.createdAt;
-			bap = new BAP({ rootPk });
+			bap = createBAP(rootPk);
 			bap.importIds(config.ids);
 		} else {
 			// New master
 			rootPk = opts.wif ?? PrivateKey.fromRandom().toWif();
 			labels = {};
-			bap = new BAP({ rootPk });
+			bap = createBAP(rootPk);
 		}
 
 		const identity = bap.newId();

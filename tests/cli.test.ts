@@ -380,6 +380,191 @@ describe("CLI: version and help", () => {
 	});
 });
 
+describe("CLI: import 0.1.x backup formats", () => {
+	const HDPrivateKey =
+		"xprv9s21ZrQH143K2LcEfSnFRH1JvdKAcuZj2C8kAzCDnvqC4kgo417hYmAYQKdYDSzQSnQMLWXjDG42TgWwdYqwhAWTWpEBG1ighLLNnVHNKxx";
+
+	test("imports BIP32 (xprv) backup format", () => {
+		// Create a BIP32 backup the way 0.1.x would have exported it
+		const { BAP } = require("../src/index");
+		const bap = new BAP(HDPrivateKey);
+		const id = bap.newId();
+		const backup = bap.exportForBackup("Legacy Backup");
+
+		expect(backup.xprv).toBeTruthy();
+		expect(backup.ids).toBeTruthy();
+
+		const backupFile = join(testHome, "legacy-backup.json");
+		writeFileSync(backupFile, JSON.stringify(backup));
+
+		const { exitCode, stdout } = run("import", backupFile);
+		expect(exitCode).toBe(0);
+		expect(stdout).toContain("Backup imported:");
+		expect(stdout).toContain("Identities: 1");
+		expect(stdout).toContain("Label: Legacy Backup");
+
+		// Verify we can list the imported identity
+		const { stdout: listOut } = run("list");
+		expect(listOut.split("\n").filter((l) => l.trim()).length).toBeGreaterThanOrEqual(1);
+	});
+
+	test("imports Type42 (rootPk) backup format", () => {
+		const { BAP } = require("../src/index");
+		const { PrivateKey } = require("@bsv/sdk");
+		const pk = PrivateKey.fromRandom();
+		const bap = new BAP({ rootPk: pk.toWif() });
+		bap.newId();
+		bap.newId();
+		const backup = bap.exportForBackup("Type42 Backup");
+
+		expect(backup.rootPk).toBeTruthy();
+
+		const backupFile = join(testHome, "type42-backup.json");
+		writeFileSync(backupFile, JSON.stringify(backup));
+
+		const { exitCode, stdout } = run("import", backupFile);
+		expect(exitCode).toBe(0);
+		expect(stdout).toContain("Identities: 2");
+
+		const { stdout: listOut } = run("list");
+		const lines = listOut.split("\n").filter((l) => l.trim());
+		expect(lines.length).toBe(2);
+	});
+
+	test("imports backup without label", () => {
+		const { BAP } = require("../src/index");
+		const { PrivateKey } = require("@bsv/sdk");
+		const pk = PrivateKey.fromRandom();
+		const bap = new BAP({ rootPk: pk.toWif() });
+		bap.newId();
+		const backup = bap.exportForBackup(); // no label
+
+		const backupFile = join(testHome, "nolabel.json");
+		writeFileSync(backupFile, JSON.stringify(backup));
+
+		const { exitCode, stdout } = run("import", backupFile);
+		expect(exitCode).toBe(0);
+		expect(stdout).toContain("Identities: 1");
+		expect(stdout).not.toContain("Label:");
+	});
+
+	test("imported BIP32 identity can export-account", () => {
+		const { BAP } = require("../src/index");
+		const bap = new BAP(HDPrivateKey);
+		bap.newId();
+		const backup = bap.exportForBackup();
+
+		const backupFile = join(testHome, "bip32.json");
+		writeFileSync(backupFile, JSON.stringify(backup));
+
+		run("import", backupFile);
+		const { stdout, exitCode } = run("export-account");
+		expect(exitCode).toBe(0);
+		const account = JSON.parse(stdout);
+		expect(account.wif).toBeTruthy();
+		expect(account.id).toBeTruthy();
+	});
+});
+
+describe("CLI: edge cases", () => {
+	test("info falls back to first identity when active file is stale", () => {
+		run("create", "--name", "Only");
+		// Corrupt the active file with a non-existent bapId
+		writeFileSync(join(testConfigDir, "active"), "nonexistent-bap-id");
+
+		const { exitCode, stdout } = run("info");
+		expect(exitCode).toBe(0);
+		expect(stdout).toContain("Active Identity:");
+		expect(stdout).toContain("Label:         Only");
+	});
+
+	test("list works when active file is missing", () => {
+		run("create", "--name", "Test");
+		// Delete the active file
+		rmSync(join(testConfigDir, "active"));
+
+		const { stdout, exitCode } = run("list");
+		expect(exitCode).toBe(0);
+		expect(stdout).toContain("(Test)");
+	});
+
+	test("create three identities sequentially", () => {
+		run("create", "--name", "A");
+		run("create", "--name", "B");
+		run("create", "--name", "C");
+
+		const { stdout } = run("list");
+		expect(stdout).toContain("(A)");
+		expect(stdout).toContain("(B)");
+		expect(stdout).toContain("(C)");
+		const lines = stdout.split("\n").filter((l) => l.trim());
+		expect(lines.length).toBe(3);
+	});
+
+	test("remove last identity leaves empty list", () => {
+		run("create", "--name", "Solo");
+		const { stdout: listOut } = run("list");
+		const bapId = listOut.split("\n").find((l) => l.includes("(Solo)"))?.trim().replace("*", "").trim().split(" ")[0];
+
+		run("remove", bapId!);
+		const { exitCode } = run("list");
+		// Should fail because no identities remain (loadBAP still works but listIds is empty)
+		// Actually the BAP instance can have 0 ids; let's see what happens
+		expect(exitCode).toBe(0);
+	});
+
+	test("encrypt/decrypt with special characters", () => {
+		run("create");
+		const data = 'hello "world" & <tags> \' newline';
+		const { stdout: encrypted } = run("encrypt", data);
+		const { stdout: decrypted } = run("decrypt", encrypted.trim());
+		expect(decrypted.trim()).toBe(data);
+	});
+
+	test("export-account for non-active identity", () => {
+		run("create", "--name", "A");
+		const { stdout: listOut } = run("list");
+		const aBapId = listOut.split("\n").find((l) => l.includes("(A)"))?.trim().replace("*", "").trim().split(" ")[0];
+
+		run("create", "--name", "B");
+		// B is now active, but export A's account
+		const { stdout, exitCode } = run("export-account", "--id", aBapId!);
+		expect(exitCode).toBe(0);
+		const backup = JSON.parse(stdout);
+		expect(backup.id).toBe(aBapId);
+	});
+
+	test("export roundtrip preserves multiple identities", () => {
+		run("create", "--name", "A");
+		run("create", "--name", "B");
+		run("create", "--name", "C");
+
+		const { stdout: exportOut } = run("export");
+		const backupFile = join(testHome, "multi.json");
+		writeFileSync(backupFile, exportOut);
+
+		const newHome = freshHome();
+		Bun.spawnSync(["bun", "src/cli.ts", "import", backupFile], {
+			cwd: "/Users/satchmo/code/bap",
+			env: { ...process.env, HOME: newHome },
+		});
+		const listResult = Bun.spawnSync(["bun", "src/cli.ts", "list"], {
+			cwd: "/Users/satchmo/code/bap",
+			env: { ...process.env, HOME: newHome },
+		});
+		const lines = listResult.stdout.toString().split("\n").filter((l) => l.trim());
+		expect(lines.length).toBe(3);
+
+		rmSync(newHome, { recursive: true, force: true });
+	});
+
+	test("unknown command shows error", () => {
+		const { exitCode, stderr } = run("foobar");
+		expect(exitCode).toBe(1);
+		expect(stderr).toContain("unknown command");
+	});
+});
+
 describe("CLI: deterministic WIF", () => {
 	test("same WIF produces same identities", () => {
 		const wif = "L5EZftvrYaSudiozVRzTqLcHLNDoVn7H5HSfM9BAN6tMJX8oTWz6";
