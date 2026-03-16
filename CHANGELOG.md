@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.2.0] - 2026-03-16
+
+### Breaking Changes
+- `MemberID` class removed — use `identity.exportAccountBackup()` for account-level backup
+- `identity.identityKey` renamed to `identity.bapId`
+- `identity.getIdentityKey()` removed — use `identity.bapId` property
+- `identity.idName` removed — use external labels
+- `identity.setAttribute()` and all attribute methods removed from core
+- `identity.signMessage()` removed — signing delegated to wallet
+- `identity.encrypt/decrypt()` removed from MasterID — use `bap.encrypt/decrypt()` for master-level
+- `identity.getEncryptionPublicKey()` removed
+- `identity.getCurrentAddress()` removed — use `identity.getAccountKey()`
+- `exportMemberBackup()` renamed to `exportAccountBackup()` (returns `{ wif, id }`)
+
+### Added
+- `MasterID.exportAccountBackup()` — returns `{ wif, id }` for account-level backup
+- `BapAccountBackup` interface exported from package
+- CLI rewrite with commander.js — 16 commands covering identity CRUD, backup, crypto, API lookups, utilities
+- Multi-identity CLI support with active identity concept (`bap use <bapId>`)
+- CLI storage at `~/.bap/` with `identity.json` and `active` file
+- Comprehensive CLI test suite (41 tests)
+- Header/social share image
+
+### Changed
+- Default BAP API server switched to `https://api.1sat.app/1sat/bap`
+- README rewritten with 0.2.0 API reference, CLI docs, migration guide from 0.1.x
+- `src/README.md` condensed to contributor API reference
+
+### Fixed
+- CLI `loadBAP()` now correctly detects BIP32 (xprv) vs Type42 (WIF) key format
+- CLI `verify` command catches invalid signature format instead of crashing
+
 ## [0.2.0-alpha.0] - 2026-03-13
 
 ### Changed
