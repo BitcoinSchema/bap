@@ -176,7 +176,9 @@ async function tryProtectWithTouchID(
     return { rootPkEncrypted };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.log(`  Touch ID:      failed (${msg}) -- key stored as plaintext`);
+    console.log(`  Touch ID:      skipped (${msg})`);
+    console.log("  WARNING: Key is stored as plaintext on disk.");
+    console.log("  Run 'bap touchid enable' later to protect it with Secure Enclave.");
     return null;
   }
 }
@@ -249,6 +251,10 @@ program
     console.log(`  Root Address:  ${identity.rootAddress}`);
     console.log(`  Root Path:     ${identity.rootPath}`);
     console.log(`  Stored at:     ${CONFIG_FILE}`);
+    console.log("");
+    console.log("  IMPORTANT: Back up your identity now with 'bap export > backup.json'.");
+    console.log("  If Touch ID is enabled, your key is hardware-bound and cannot be");
+    console.log("  recovered from another machine without this backup.");
   });
 
 program
@@ -348,7 +354,16 @@ program
   .command("export")
   .description("Export master backup (JSON to stdout)")
   .action(async () => {
-    const { bap } = await loadBAP();
+    const { bap, config } = await loadBAP();
+    if (config.rootPkEncrypted) {
+      console.error(
+        "NOTE: Your key is protected by Secure Enclave (hardware-bound)."
+      );
+      console.error(
+        "This backup is the ONLY recovery path if this machine is lost or wiped."
+      );
+      console.error("Store it securely.\n");
+    }
     const backup = bap.exportForBackup();
     console.log(JSON.stringify(backup, null, 2));
   });
@@ -568,7 +583,7 @@ touchid
         console.log("Identity key is already protected with Secure Enclave.");
       } else {
         console.error(
-          'Identity key uses the old Keychain format which is no longer supported. Re-import your backup with "bap import <file>" to migrate.'
+          'Identity key uses the legacy encryption format which is no longer supported. Re-import your backup with "bap import <file>" to migrate.'
         );
       }
       return;
@@ -598,6 +613,8 @@ touchid
       process.exit(1);
     }
 
+    console.log("WARNING: Secure Enclave keys are hardware-bound to THIS machine.");
+    console.log("Export a backup first with 'bap export > backup.json' if you haven't already.\n");
     console.log("Encrypting identity key with Secure Enclave...");
     const rootPkEncrypted = await protectRootKey(plainKey);
 
@@ -633,7 +650,7 @@ touchid
 
     if (!config.rootPkEncrypted.startsWith("se:")) {
       console.error(
-        "Identity key uses the old Keychain format which is no longer supported."
+        "Identity key uses the legacy encryption format which is no longer supported."
       );
       console.error(
         "You will need to re-import your backup. Run 'bap export' if you can still decrypt, or use your backup file."
@@ -656,10 +673,9 @@ touchid
     // Remove the Secure Enclave key and vault file
     await removeProtection();
 
-    console.log("Secure Enclave protection removed. Key is now stored as plaintext.");
-    console.log(
-      "WARNING: Your identity key is no longer hardware-protected."
-    );
+    console.log("Secure Enclave protection removed.");
+    console.log("WARNING: Your identity key is now stored as plaintext on disk.");
+    console.log("Anyone with access to this machine can read it.");
   });
 
 program.parse();
