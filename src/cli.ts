@@ -1,268 +1,274 @@
 #!/usr/bin/env bun
-/**
- * BAP CLI - Bitcoin Attestation Protocol Command Line Interface
- *
- * Usage:
- *   bap create [--name <name>] [--wif <wif>]  Create new BAP identity
- *   bap sign <message>                        Sign a message
- *   bap verify <message> <sig> <address>      Verify a signature
- *   bap friend-pubkey <friendBapId>           Get friend public key
- *   bap encrypt <data> <friendBapId>          Encrypt for friend
- *   bap decrypt <ciphertext> <friendBapId>    Decrypt from friend
- *   bap export                                Export identity backup
- *   bap import <backup>                       Import identity from backup
- *   bap info                                  Show current identity info
- */
-
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { PrivateKey, Utils } from "@bsv/sdk";
-import { BAP } from "bsv-bap";
+import { PrivateKey } from "@bsv/sdk";
+import { Command } from "commander";
+import { BAP, bapIdFromAddress, bapIdFromPubkey } from "bsv-bap";
 
-const { toHex, toArray } = Utils;
-
-// Default config path
+// Storage paths
 const CONFIG_DIR = join(homedir(), ".bap");
 const CONFIG_FILE = join(CONFIG_DIR, "identity.json");
+const ACTIVE_FILE = join(CONFIG_DIR, "active");
 
-interface StoredIdentity {
-	wif: string;
+// Stored config shape
+interface StoredConfig {
+	rootPk: string;
 	ids: string;
-	label?: string;
+	labels: Record<string, string>;
 	createdAt: string;
 }
 
 function ensureConfigDir(): void {
-	const { mkdirSync } = require("node:fs");
 	if (!existsSync(CONFIG_DIR)) {
 		mkdirSync(CONFIG_DIR, { recursive: true });
 	}
 }
 
-function loadIdentity(): BAP | null {
-	if (!existsSync(CONFIG_FILE)) {
-		return null;
-	}
-
-	try {
-		const data = JSON.parse(readFileSync(CONFIG_FILE, "utf-8")) as StoredIdentity;
-		const bap = new BAP({ rootPk: data.wif });
-		if (data.ids) {
-			bap.importIds(data.ids);
-		}
-		return bap;
-	} catch (error) {
-		console.error("Failed to load identity:", error);
-		return null;
-	}
+function loadConfig(): StoredConfig | null {
+	if (!existsSync(CONFIG_FILE)) return null;
+	return JSON.parse(readFileSync(CONFIG_FILE, "utf-8")) as StoredConfig;
 }
 
-function saveIdentity(bap: BAP, wif: string, label?: string): void {
+function loadBAP(): { bap: BAP; config: StoredConfig } {
+	const config = loadConfig();
+	if (!config) {
+		console.error("No identity found. Run 'bap create' first.");
+		process.exit(1);
+	}
+	const bap = new BAP({ rootPk: config.rootPk });
+	if (config.ids) {
+		bap.importIds(config.ids);
+	}
+	return { bap, config };
+}
+
+function saveConfig(
+	bap: BAP,
+	rootPk: string,
+	labels: Record<string, string>,
+	createdAt?: string,
+): void {
 	ensureConfigDir();
-	const backup: StoredIdentity = {
-		wif,
+	const config: StoredConfig = {
+		rootPk,
 		ids: bap.exportIds(),
-		...(label && { label }),
-		createdAt: new Date().toISOString(),
+		labels,
+		createdAt: createdAt ?? new Date().toISOString(),
 	};
-	writeFileSync(CONFIG_FILE, JSON.stringify(backup, null, 2));
+	writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
 }
 
-function printUsage(): void {
-	console.log(`
-BAP CLI - Bitcoin Attestation Protocol
-
-Commands:
-  create [--name <name>] [--wif <wif>]  Create new BAP identity
-  sign <message>                        Sign a message with identity
-  verify <message> <sig> <address>      Verify a BSM signature
-  friend-pubkey <friendBapId>           Get encryption pubkey for friend
-  encrypt <data> <friendBapId>          Encrypt data for friend
-  decrypt <ciphertext> <friendBapId>    Decrypt data from friend
-  export                                Export identity backup (JSON)
-  import <file>                         Import identity from backup file
-  info                                  Show current identity info
-  help                                  Show this help message
-
-Options:
-  --name <name>  Identity name (for create)
-  --wif <wif>    Use existing WIF key (for create)
-
-Examples:
-  bap create --name "My Identity"
-  bap sign "Hello World"
-  bap verify "Hello World" <signature> <address>
-  bap friend-pubkey "abc123..."
-  bap encrypt "secret message" "abc123..."
-  bap decrypt "<ciphertext>" "abc123..."
-  bap export > backup.json
-  bap import backup.json
-`);
+function getActiveBapId(): string | null {
+	if (!existsSync(ACTIVE_FILE)) return null;
+	return readFileSync(ACTIVE_FILE, "utf-8").trim();
 }
 
-function createIdentity(args: string[]): void {
-	let name = "Default Identity";
-	let wif: string | undefined;
+function setActiveBapId(bapId: string): void {
+	ensureConfigDir();
+	writeFileSync(ACTIVE_FILE, bapId);
+}
 
-	// Parse arguments
-	for (let i = 0; i < args.length; i++) {
-		if (args[i] === "--name" && args[i + 1]) {
-			name = args[i + 1];
-			i++;
-		} else if (args[i] === "--wif" && args[i + 1]) {
-			wif = args[i + 1];
-			i++;
+function getActiveIdentity(bap: BAP, config: StoredConfig) {
+	const activeBapId = getActiveBapId();
+	const ids = bap.listIds();
+
+	if (ids.length === 0) {
+		console.error("No identities found. Run 'bap create' first.");
+		process.exit(1);
+	}
+
+	const bapId = activeBapId && ids.includes(activeBapId) ? activeBapId : ids[0];
+	const identity = bap.getId(bapId);
+	if (!identity) {
+		console.error(`Identity ${bapId} not found.`);
+		process.exit(1);
+	}
+	return { identity, bapId, label: config.labels[bapId] };
+}
+
+// --- CLI ---
+
+const program = new Command();
+
+program
+	.name("bap")
+	.description("BAP - Bitcoin Attestation Protocol CLI")
+	.version("0.2.0");
+
+// Identity Management
+
+program
+	.command("create")
+	.description("Create a new identity")
+	.option("--name <name>", "Human-readable label for the identity")
+	.option("--wif <wif>", "Use an existing WIF key as the master key")
+	.action((opts) => {
+		let config = loadConfig();
+		let rootPk: string;
+		let labels: Record<string, string>;
+		let createdAt: string | undefined;
+		let bap: BAP;
+
+		if (config) {
+			// Existing master — add a new identity
+			rootPk = config.rootPk;
+			labels = config.labels;
+			createdAt = config.createdAt;
+			bap = new BAP({ rootPk });
+			bap.importIds(config.ids);
+		} else {
+			// New master
+			rootPk = opts.wif ?? PrivateKey.fromRandom().toWif();
+			labels = {};
+			bap = new BAP({ rootPk });
 		}
-	}
 
-	// Generate or use provided WIF
-	if (!wif) {
-		const privateKey = PrivateKey.fromRandom();
-		wif = privateKey.toWif();
-	}
+		const identity = bap.newId();
+		const bapId = identity.bapId;
 
-	// Create BAP instance with Type42
-	const bap = new BAP({ rootPk: wif });
-	const identity = bap.newId(name);
+		if (opts.name) {
+			labels[bapId] = opts.name;
+		}
 
-	// Save to config
-	saveIdentity(bap, wif);
+		saveConfig(bap, rootPk, labels, createdAt);
+		setActiveBapId(bapId);
 
-	console.log("Identity created successfully!");
-	console.log(`  Name: ${name}`);
-	console.log(`  Identity Key: ${identity.getIdentityKey()}`);
-	console.log(`  Root Address: ${identity.rootAddress}`);
-	console.log(`  Signing Address: ${identity.getCurrentAddress()}`);
-	console.log(`\nStored at: ${CONFIG_FILE}`);
-}
+		console.log("Identity created:");
+		console.log(`  BAP ID:        ${bapId}`);
+		if (opts.name) console.log(`  Label:         ${opts.name}`);
+		console.log(`  Root Address:  ${identity.rootAddress}`);
+		console.log(`  Root Path:     ${identity.rootPath}`);
+		console.log(`  Stored at:     ${CONFIG_FILE}`);
+	});
 
-function signMessage(message: string): void {
-	const bap = loadIdentity();
-	if (!bap) {
-		console.error("No identity found. Run 'bap create' first.");
-		process.exit(1);
-	}
+program
+	.command("list")
+	.description("List all identities (* = active)")
+	.action(() => {
+		const { bap, config } = loadBAP();
+		const ids = bap.listIds();
+		const active = getActiveBapId();
 
-	const ids = bap.listIds();
-	if (ids.length === 0) {
-		console.error("No identities in BAP instance.");
-		process.exit(1);
-	}
+		if (ids.length === 0) {
+			console.log("No identities. Run 'bap create' to get started.");
+			return;
+		}
 
-	const identity = bap.getId(ids[0]);
-	if (!identity) {
-		console.error("Failed to get identity.");
-		process.exit(1);
-	}
+		for (const bapId of ids) {
+			const marker = bapId === active ? " *" : "  ";
+			const label = config.labels[bapId];
+			const suffix = label ? ` (${label})` : "";
+			console.log(`${marker} ${bapId}${suffix}`);
+		}
+	});
 
-	const { address, signature } = identity.signMessage(toArray(message, "utf8"));
+program
+	.command("use")
+	.description("Set active identity")
+	.argument("<bapId>", "BAP ID to activate")
+	.action((bapId: string) => {
+		const { bap } = loadBAP();
+		const ids = bap.listIds();
 
-	console.log(JSON.stringify({ message, address, signature }, null, 2));
-}
+		if (!ids.includes(bapId)) {
+			console.error(`Identity ${bapId} not found.`);
+			process.exit(1);
+		}
 
-function verifySignature(message: string, signature: string, address: string): void {
-	const bap = new BAP({ rootPk: PrivateKey.fromRandom().toWif() }); // Temporary instance
-	const isValid = bap.verifySignature(message, address, signature);
+		setActiveBapId(bapId);
+		console.log(`Active identity: ${bapId}`);
+	});
 
-	console.log(JSON.stringify({ valid: isValid, message, address, signature }, null, 2));
-}
+program
+	.command("info")
+	.description("Show active identity details")
+	.action(() => {
+		const { bap, config } = loadBAP();
+		const { identity, bapId, label } = getActiveIdentity(bap, config);
 
-function getFriendPubkey(friendBapId: string): void {
-	const bap = loadIdentity();
-	if (!bap) {
-		console.error("No identity found. Run 'bap create' first.");
-		process.exit(1);
-	}
+		console.log("Active Identity:");
+		console.log(`  BAP ID:        ${bapId}`);
+		if (label) console.log(`  Label:         ${label}`);
+		console.log(`  Root Address:  ${identity.rootAddress}`);
+		console.log(`  Root Path:     ${identity.rootPath}`);
+		console.log(`  Current Path:  ${identity.currentPath}`);
+		console.log(`  Previous Path: ${identity.previousPath}`);
+		console.log(`  Account Key:   ${identity.getAccountKey().toPublicKey().toString()}`);
+	});
 
-	const ids = bap.listIds();
-	if (ids.length === 0) {
-		console.error("No identities in BAP instance.");
-		process.exit(1);
-	}
+program
+	.command("remove")
+	.description("Remove an identity")
+	.argument("<bapId>", "BAP ID to remove")
+	.action((bapId: string) => {
+		const { bap, config } = loadBAP();
 
-	const identity = bap.getId(ids[0]);
-	if (!identity) {
-		console.error("Failed to get identity.");
-		process.exit(1);
-	}
+		if (!bap.getId(bapId)) {
+			console.error(`Identity ${bapId} not found.`);
+			process.exit(1);
+		}
 
-	const publicKey = identity.getEncryptionPublicKeyWithSeed(friendBapId);
-	console.log(JSON.stringify({ friendBapId, publicKey }, null, 2));
-}
+		bap.removeId(bapId);
+		delete config.labels[bapId];
+		saveConfig(bap, config.rootPk, config.labels, config.createdAt);
 
-function encryptForFriend(data: string, friendBapId: string): void {
-	const bap = loadIdentity();
-	if (!bap) {
-		console.error("No identity found. Run 'bap create' first.");
-		process.exit(1);
-	}
+		// Clear active if it was this one
+		if (getActiveBapId() === bapId) {
+			const remaining = bap.listIds();
+			if (remaining.length > 0) {
+				setActiveBapId(remaining[0]);
+			} else {
+				writeFileSync(ACTIVE_FILE, "");
+			}
+		}
 
-	const ids = bap.listIds();
-	if (ids.length === 0) {
-		console.error("No identities in BAP instance.");
-		process.exit(1);
-	}
+		console.log(`Removed identity: ${bapId}`);
+	});
 
-	const identity = bap.getId(ids[0]);
-	if (!identity) {
-		console.error("Failed to get identity.");
-		process.exit(1);
-	}
+// Backup
 
-	const ciphertext = identity.encryptWithSeed(data, friendBapId);
-	console.log(JSON.stringify({ ciphertext, friendBapId }, null, 2));
-}
+program
+	.command("export")
+	.description("Export master backup (JSON to stdout)")
+	.action(() => {
+		const { bap } = loadBAP();
+		const backup = bap.exportForBackup();
+		console.log(JSON.stringify(backup, null, 2));
+	});
 
-function decryptFromFriend(ciphertext: string, friendBapId: string): void {
-	const bap = loadIdentity();
-	if (!bap) {
-		console.error("No identity found. Run 'bap create' first.");
-		process.exit(1);
-	}
+program
+	.command("export-account")
+	.description("Export account backup for active or specified identity")
+	.option("--id <bapId>", "Specific BAP ID to export")
+	.action((opts) => {
+		const { bap, config } = loadBAP();
 
-	const ids = bap.listIds();
-	if (ids.length === 0) {
-		console.error("No identities in BAP instance.");
-		process.exit(1);
-	}
+		let identity;
+		if (opts.id) {
+			identity = bap.getId(opts.id);
+			if (!identity) {
+				console.error(`Identity ${opts.id} not found.`);
+				process.exit(1);
+			}
+		} else {
+			({ identity } = getActiveIdentity(bap, config));
+		}
 
-	const identity = bap.getId(ids[0]);
-	if (!identity) {
-		console.error("Failed to get identity.");
-		process.exit(1);
-	}
+		const backup = identity.exportAccountBackup();
+		console.log(JSON.stringify(backup, null, 2));
+	});
 
-	try {
-		const data = identity.decryptWithSeed(ciphertext, friendBapId);
-		console.log(JSON.stringify({ data, friendBapId }, null, 2));
-	} catch (error) {
-		console.error("Decryption failed:", error instanceof Error ? error.message : error);
-		process.exit(1);
-	}
-}
+program
+	.command("import")
+	.description("Import from backup file")
+	.argument("<file>", "Path to backup JSON file")
+	.action((file: string) => {
+		if (!existsSync(file)) {
+			console.error(`File not found: ${file}`);
+			process.exit(1);
+		}
 
-function exportIdentity(): void {
-	const bap = loadIdentity();
-	if (!bap) {
-		console.error("No identity found. Run 'bap create' first.");
-		process.exit(1);
-	}
-
-	// Read stored WIF
-	const stored = JSON.parse(readFileSync(CONFIG_FILE, "utf-8")) as StoredIdentity;
-	const backup = bap.exportForBackup(stored.label);
-
-	console.log(JSON.stringify(backup, null, 2));
-}
-
-function importIdentity(file: string): void {
-	if (!existsSync(file)) {
-		console.error(`File not found: ${file}`);
-		process.exit(1);
-	}
-
-	try {
 		const backup = JSON.parse(readFileSync(file, "utf-8"));
 
 		if (!backup.rootPk && !backup.xprv) {
@@ -271,136 +277,127 @@ function importIdentity(file: string): void {
 		}
 
 		let bap: BAP;
-		let wif: string;
+		let rootPk: string;
 
 		if (backup.rootPk) {
-			// Type42 format
 			bap = new BAP({ rootPk: backup.rootPk });
-			wif = backup.rootPk;
+			rootPk = backup.rootPk;
 		} else {
-			// BIP32 format (legacy)
 			bap = new BAP(backup.xprv);
-			wif = backup.xprv;
+			rootPk = backup.xprv;
 		}
 
 		if (backup.ids) {
 			bap.importIds(backup.ids);
 		}
 
-		saveIdentity(bap, wif, backup.label);
+		const labels: Record<string, string> = {};
+		if (backup.label) {
+			// Apply label to first identity as a default
+			const ids = bap.listIds();
+			if (ids.length > 0) {
+				labels[ids[0]] = backup.label;
+			}
+		}
+
+		saveConfig(bap, rootPk, labels);
 
 		const ids = bap.listIds();
-		console.log("Identity imported successfully!");
+		if (ids.length > 0) {
+			setActiveBapId(ids[0]);
+		}
+
+		console.log("Backup imported:");
 		console.log(`  Identities: ${ids.length}`);
-		if (backup.label) {
-			console.log(`  Label: ${backup.label}`);
+		if (backup.label) console.log(`  Label: ${backup.label}`);
+		console.log(`  Stored at: ${CONFIG_FILE}`);
+	});
+
+// Crypto
+
+program
+	.command("encrypt")
+	.description("Encrypt data with master key (ECIES)")
+	.argument("<data>", "Data to encrypt")
+	.action((data: string) => {
+		const { bap } = loadBAP();
+		console.log(bap.encrypt(data));
+	});
+
+program
+	.command("decrypt")
+	.description("Decrypt ciphertext with master key")
+	.argument("<ciphertext>", "Base64 ciphertext to decrypt")
+	.action((ciphertext: string) => {
+		const { bap } = loadBAP();
+		console.log(bap.decrypt(ciphertext));
+	});
+
+program
+	.command("verify")
+	.description("Verify a BSM signature")
+	.argument("<message>", "Original message")
+	.argument("<signature>", "Base64 signature")
+	.argument("<address>", "Signing address")
+	.action((message: string, signature: string, address: string) => {
+		const bap = new BAP({ rootPk: PrivateKey.fromRandom().toWif() });
+		let valid = false;
+		try {
+			valid = bap.verifySignature(message, address, signature);
+		} catch {
+			// Invalid signature format — treat as not valid
 		}
-		console.log(`\nStored at: ${CONFIG_FILE}`);
-	} catch (error) {
-		console.error("Failed to import identity:", error);
-		process.exit(1);
-	}
-}
+		console.log(JSON.stringify({ valid, message, address, signature }, null, 2));
+	});
 
-function showInfo(): void {
-	const bap = loadIdentity();
-	if (!bap) {
-		console.error("No identity found. Run 'bap create' first.");
-		process.exit(1);
-	}
+// API Lookups
 
-	const ids = bap.listIds();
-	console.log("BAP Identity Info");
-	console.log(`  Config: ${CONFIG_FILE}`);
-	console.log(`  Identities: ${ids.length}`);
+program
+	.command("lookup")
+	.description("Lookup identity on the BAP overlay")
+	.argument("<bapId>", "BAP ID to lookup")
+	.action(async (bapId: string) => {
+		const bap = new BAP({ rootPk: PrivateKey.fromRandom().toWif() });
+		const result = await bap.getIdentity(bapId);
+		console.log(JSON.stringify(result, null, 2));
+	});
 
-	for (const idKey of ids) {
-		const identity = bap.getId(idKey);
-		if (identity) {
-			console.log(`\n  Identity: ${identity.idName}`);
-			console.log(`    Key: ${idKey}`);
-			console.log(`    Root Address: ${identity.rootAddress}`);
-			console.log(`    Current Address: ${identity.getCurrentAddress()}`);
-			console.log(`    Encryption Pubkey: ${identity.getEncryptionPublicKey()}`);
-		}
-	}
-}
+program
+	.command("lookup-address")
+	.description("Lookup identity by Bitcoin address")
+	.argument("<address>", "Bitcoin address to lookup")
+	.action(async (address: string) => {
+		const bap = new BAP({ rootPk: PrivateKey.fromRandom().toWif() });
+		const result = await bap.getIdentityFromAddress(address);
+		console.log(JSON.stringify(result, null, 2));
+	});
 
-// Main CLI entry point
-const args = process.argv.slice(2);
-const command = args[0];
+program
+	.command("attestations")
+	.description("Get attestations for an attribute hash")
+	.argument("<hash>", "Attribute hash to lookup")
+	.action(async (hash: string) => {
+		const bap = new BAP({ rootPk: PrivateKey.fromRandom().toWif() });
+		const result = await bap.getAttestationsForHash(hash);
+		console.log(JSON.stringify(result, null, 2));
+	});
 
-switch (command) {
-	case "create":
-		createIdentity(args.slice(1));
-		break;
+// Utilities
 
-	case "sign":
-		if (!args[1]) {
-			console.error("Usage: bap sign <message>");
-			process.exit(1);
-		}
-		signMessage(args[1]);
-		break;
+program
+	.command("id-from-address")
+	.description("Derive BAP ID from a Bitcoin address")
+	.argument("<address>", "Bitcoin address (must be the root/member address)")
+	.action((address: string) => {
+		console.log(bapIdFromAddress(address));
+	});
 
-	case "verify":
-		if (!args[1] || !args[2] || !args[3]) {
-			console.error("Usage: bap verify <message> <signature> <address>");
-			process.exit(1);
-		}
-		verifySignature(args[1], args[2], args[3]);
-		break;
+program
+	.command("id-from-pubkey")
+	.description("Derive BAP ID from a compressed public key")
+	.argument("<pubkey>", "Compressed public key hex (must be the member key)")
+	.action((pubkey: string) => {
+		console.log(bapIdFromPubkey(pubkey));
+	});
 
-	case "friend-pubkey":
-		if (!args[1]) {
-			console.error("Usage: bap friend-pubkey <friendBapId>");
-			process.exit(1);
-		}
-		getFriendPubkey(args[1]);
-		break;
-
-	case "encrypt":
-		if (!args[1] || !args[2]) {
-			console.error("Usage: bap encrypt <data> <friendBapId>");
-			process.exit(1);
-		}
-		encryptForFriend(args[1], args[2]);
-		break;
-
-	case "decrypt":
-		if (!args[1] || !args[2]) {
-			console.error("Usage: bap decrypt <ciphertext> <friendBapId>");
-			process.exit(1);
-		}
-		decryptFromFriend(args[1], args[2]);
-		break;
-
-	case "export":
-		exportIdentity();
-		break;
-
-	case "import":
-		if (!args[1]) {
-			console.error("Usage: bap import <backup-file>");
-			process.exit(1);
-		}
-		importIdentity(args[1]);
-		break;
-
-	case "info":
-		showInfo();
-		break;
-
-	case "help":
-	case "--help":
-	case "-h":
-		printUsage();
-		break;
-
-	default:
-		if (command) {
-			console.error(`Unknown command: ${command}`);
-		}
-		printUsage();
-		process.exit(command ? 1 : 0);
-}
+program.parse();

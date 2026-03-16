@@ -10,6 +10,7 @@ import {
   MAX_INT,
 } from "./constants";
 import type {
+  BapAccountBackup,
   Identity,
   OldIdentity,
 } from "./interface";
@@ -189,6 +190,13 @@ class MasterID {
       currentPath: this.#currentPath,
       idSeed: this.#idSeed,
       lastIdPath: "",
+    };
+  }
+
+  exportAccountBackup(): BapAccountBackup {
+    return {
+      wif: this.getAccountKey().toWif(),
+      id: this.bapId,
     };
   }
 }

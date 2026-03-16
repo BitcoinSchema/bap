@@ -40,6 +40,12 @@ export type PathPrefix =
   | `/${number}/${number}/${number}`
   | `/${number}'/${number}'/${number}'`;
 
+// Account-level backup — compatible with bitcoin-backup's BapAccountBackup
+export interface BapAccountBackup {
+  wif: string; // Account private key in WIF format
+  id: string; // BAP ID for this account
+}
+
 export interface Attestation {
   type: string;
   hash: string;

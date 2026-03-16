@@ -1,255 +1,373 @@
 # BAP - Bitcoin Attestation Protocol
 
-> Sovereign digital identity on the Bitcoin blockchain
+> Identity-only library for sovereign digital identity on Bitcoin
 
 [![npm version](https://badge.fury.io/js/bsv-bap.svg)](https://badge.fury.io/js/bsv-bap)
 [![License](https://img.shields.io/badge/license-Open%20BSV-blue.svg)](LICENSE)
 
-## Abstract
+## What is BAP?
 
-The Bitcoin Attestation Protocol (BAP) establishes a cryptographic system for creating, managing, and verifying digital identities directly on the Bitcoin blockchain. By treating Bitcoin keypairs as the fundamental identity primitive, BAP eliminates traditional authentication intermediaries while providing mathematical guarantees of identity ownership, attestation validity, and data sovereignty.
-
-## Motivation
-
-Current digital identity systems suffer from three critical failures:
-
-1. **Centralized Control**: Identity providers act as gatekeepers, capable of suspending, deleting, or modifying user identities at will. Users possess accounts, not identities.
-
-2. **Platform Fragmentation**: Each service maintains isolated identity silos, forcing users to recreate their digital presence repeatedly across platforms. Reputation, relationships, and verified attributes cannot move between systems.
-
-3. **Trust Without Verification**: Traditional systems require blind trust in institutions to maintain identity records accurately and permanently. No mathematical proof exists that your identity data remains unaltered or accessible.
-
-BAP resolves these failures by recognizing a simple axiom: **a cryptographic keypair IS an identity**. This principle, combined with Bitcoin's immutable ledger, creates a system where:
-
-- Identity ownership is cryptographically provable
-- Attestations form an auditable chain of trust  
-- Data persistence requires no institutional faith
-- Interoperability emerges from shared protocols, not corporate agreements
-
-## Core Principles
-
-### Identity as Mathematics
-
-In BAP, identity is not assigned but derived. Your identity emerges from the mathematical relationship between private and public keys:
+BAP creates deterministic digital identities from Bitcoin keypairs. Each identity is a **BAP ID** derived from a root address:
 
 ```
-IdentityKey = base58(ripemd160(sha256(rootAddress)))
+BAP ID = base58(ripemd160(sha256(rootAddress)))
 ```
 
-This deterministic derivation means identity recovery requires only the original key material - no database lookups, no account recovery flows, no customer service.
+No servers, no accounts, no intermediaries. Your identity is pure mathematics.
 
-### Attestations as Proofs
+## 0.2.0 Architecture
 
-Trust in BAP is not declared but proven. When an entity attests to an identity attribute, they create a cryptographic proof:
+BAP 0.2.0 is an **identity-only** library designed for BRC-100 wallet delegation:
 
-```
-Attestation = Sign(SHA256(attribute + identityKey), attestorKey)
-```
+- **`BAP` class** - Master key management, identity CRUD, crypto operations, API lookups
+- **`MasterID` class** - Individual identity with key derivation and path management
+- **No signing keys, no attributes, no transactions** - Wallets handle those via BRC-100
 
-These proofs are:
-- **Independently verifiable**: Any party can validate without contacting the attestor
-- **Temporally fixed**: The blockchain timestamp prevents backdating
-- **Publicly auditable**: Anyone can examine an entity's attestation history
+This separation means BAP manages *who you are* while your wallet manages *what you do*.
 
-### Sovereignty Through Cryptography
-
-BAP implements true data sovereignty through:
-
-1. **Key Rotation**: Identity owners can update signing keys while maintaining identity continuity
-2. **Selective Disclosure**: Share only specific attributes with cryptographic proof of the whole
-3. **Encrypted Storage**: Sensitive data remains encrypted, with decryption controlled by identity owner
-
-## Technical Architecture
-
-### Protocol Structure
-
-BAP transactions follow a deterministic format:
-
-```
-OP_RETURN
-1BAPSuaPnfGnSBM3GLV9yhxUdYe4vGbdMT  # Protocol prefix
-[ACTION]                            # ID | ATTEST | ALIAS | DATA | REVOKE
-[DATA]                              # Action-specific payload
-|                                   # Separator
-[AIP_SIGNATURE]                     # Author Identity Protocol signature
-```
-
-### Identity Lifecycle
-
-1. **Genesis**: Create identity by deriving key from root address
-2. **Attestation**: Build trust through cryptographic attestations
-3. **Rotation**: Update signing keys while preserving identity chain
-4. **Revocation**: Cryptographically invalidate compromised keys
-
-### Cryptographic Operations
-
-Each identity possesses distinct keys for different operations:
-
-- **Member Key**: The root key for each identity path, used for key derivation
-- **Signing Key**: Derived from member key for transaction authorization and message signing
-- **Encryption Key**: ECIES encryption for private data exchange
-- **Derivation Path**: Hierarchical key generation for sub-identities
-
-### Key Derivation Hierarchy
-
-BAP uses a two-level key derivation for signing operations:
-
-```
-Root Key (HD or Type42 master)
-    ↓ path derivation
-Member Key (identity root at path)
-    ↓ deriveChild(publicKey, "1-bap-identity")
-Signing Key (used for on-chain operations)
-```
-
-This structure ensures compatibility with BRC-100 wallet tooling while maintaining BAP's identity management features. The member key serves as the BRC-100 identity root, and the signing key is deterministically derived for on-chain operations.
-
-## Implementation
-
-### Installation
+## Installation
 
 ```bash
+bun add bsv-bap
+# or
 npm install bsv-bap
 ```
 
-### Basic Usage
+Peer dependency: `@bsv/sdk@^2.0.1`
 
-```javascript
+## Quick Start
+
+```typescript
 import { BAP } from 'bsv-bap';
 import { PrivateKey } from '@bsv/sdk';
 
-// Initialize with Type 42 derivation (recommended)
+// Create BAP instance with Type 42 derivation
 const rootKey = PrivateKey.fromRandom();
-const bap = new BAP({
-  rootPk: rootKey.toWif()
-});
+const bap = new BAP({ rootPk: rootKey.toWif() });
 
-// Create identity with meaningful name
-const identity = bap.newId('Professional Identity');
-identity.setAttribute('name', 'Satoshi Nakamoto');
+// Create an identity
+const identity = bap.newId();
 
-// Generate ID transaction for blockchain
-const idTransaction = identity.getInitialIdTransaction();
+console.log(identity.bapId);       // Deterministic BAP ID
+console.log(identity.rootAddress); // Root Bitcoin address
+console.log(identity.rootPath);    // "bap:0" (counter-based)
 
-// Create attestation hash for verification
-const attestationHash = identity.getAttestationHash('name');
+// Create a second identity
+const second = bap.newId();
+console.log(second.rootPath);      // "bap:1"
+
+// Export master backup (encrypted ids + rootPk)
+const backup = bap.exportForBackup('My Identities');
 ```
 
-### Identity Discovery
+## API Reference
 
-Type 42 identities use sequential counters (`bap:0`, `bap:1`, etc.) for deterministic recovery. This enables identity discovery when restoring from partial backups:
+### BAP Class
 
-```javascript
+The main class for managing identities.
+
+#### Constructor
+
+```typescript
+// Type 42 mode (recommended)
+const bap = new BAP({ rootPk: wifKey });
+
+// BIP32 mode (legacy, deprecated)
+const bap = new BAP(xprvKey);
+
+// With API token and custom server
+const bap = new BAP({ rootPk: wifKey }, token, server);
+```
+
+#### Identity Management
+
+```typescript
+bap.newId(customPath?: string, idSeed?: string): MasterID
+bap.newIdWithCounter(counter: number): MasterID
+bap.getId(bapId: string): MasterID | null
+bap.listIds(): string[]
+bap.removeId(bapId: string): void
+bap.checkIdBelongs(id: MasterID): boolean
+```
+
+Type 42 identities use sequential counters (`bap:0`, `bap:1`, ...) for deterministic recovery:
+
+```typescript
 // Discover identities by checking sequential counters
-async function discoverIdentities(bap, checkExistsOnChain) {
-  const found = [];
-  
-  for (let i = 0; i < 100; i++) {  // Check first 100 slots
-    const identity = bap.newIdWithCounter(i, `Discovered Identity ${i}`);
-    
-    if (await checkExistsOnChain(identity.getIdentityKey())) {
-      found.push(identity);
-    }
+for (let i = 0; i < 100; i++) {
+  const identity = bap.newIdWithCounter(i);
+  if (await existsOnChain(identity.bapId)) {
+    console.log(`Found: ${identity.bapId}`);
   }
-  
-  return found;
 }
 ```
 
-### Wallet Rotation Semantics
+#### Import / Export
 
-The BAP ID is defined by the member key at `rootPath`, while the active wallet/signing root follows `currentPath`.
+```typescript
+// Encrypted identity blob (default)
+const encrypted: string = bap.exportIds();
+bap.importIds(encrypted);
 
-- `rootPath`: stable member key, used to derive the BAP ID
-- `currentPath`: active wallet root, used for signing and wallet operations
-- `incrementPath()`: rotates the wallet/signing root without changing the BAP ID
+// Unencrypted identity data
+const plain = bap.exportIds(undefined, false);
+bap.importIds(plain, false);
 
-For Type 42 identities the first rotation now moves from `bap:0` to `bap:0:1`, then `bap:0:2`, and so on.
-
-For backward compatibility, malformed numeric rotation paths created by older buggy Type 42 builds continue rotating numerically (`1` -> `2`). New identities always use the namespaced `bap:<identity>:<rotation>` format.
-
-```javascript
-const identity = bap.newId('Professional Identity');
-
-const stableMemberKey = identity.getMemberKey();
-const activeWalletKey = identity.getWalletPubkey();
-
-identity.incrementPath();
-
-// Stable identity linkage
-console.log(identity.getMemberKey() === stableMemberKey); // true
-
-// Rotated wallet/signing root
-console.log(identity.getWalletPubkey() === activeWalletKey); // false
+// Master backup (for bitcoin-backup compatibility)
+const backup = bap.exportForBackup(label?, xprv?, mnemonic?);
 ```
 
-### Migration from Legacy Derivation
+#### Master-Level Crypto
 
-Existing identities using the previous (pre-signing-key-derivation) format can be migrated:
+```typescript
+// ECIES encryption with the master key
+const ciphertext = bap.encrypt('secret');
+const plaintext = bap.decrypt(ciphertext);
 
-```javascript
-// Check if identity needs migration
-if (identity.needsRotation(registeredOnChainAddress)) {
-  // Get the rotation transaction OP_RETURN
-  const opReturn = identity.getLegacyRotationTransaction();
+// BSM signature verification
+const valid = bap.verifySignature(message, address, signature);
 
-  // App handles funding and broadcasting the transaction
-  // This rotates from legacy address to new derived signing address
+// Challenge verification via API
+const valid = await bap.verifyChallengeSignature(idKey, address, challenge, signature);
+```
+
+#### API Lookups
+
+```typescript
+// Query the BAP overlay network
+const identity = await bap.getIdentity(bapId);
+const identity = await bap.getIdentityFromAddress(address);
+const attestations = await bap.getAttestationsForHash(hash);
+```
+
+### MasterID Class
+
+Represents a single identity. Managed through the `BAP` class.
+
+#### Properties
+
+```typescript
+identity.bapId: string       // Deterministic BAP ID
+identity.rootAddress: string // Root Bitcoin address
+identity.rootPath: string    // Derivation path (e.g., "bap:0")
+identity.currentPath: string // Active path (for wallet rotation)
+identity.previousPath: string
+identity.idSeed: string      // Seed used for sub-derivation
+```
+
+#### Methods
+
+```typescript
+// Get the account-level private key (for BRC-100 wallet delegation)
+identity.getAccountKey(): PrivateKey
+
+// Export identity state
+identity.export(): Identity
+
+// Export account backup (WIF + BAP ID)
+identity.exportAccountBackup(): BapAccountBackup
+
+// Import identity state
+identity.import(data: Identity | OldIdentity): void
+```
+
+### Utility Functions
+
+```typescript
+import { bapIdFromAddress, bapIdFromPubkey } from 'bsv-bap';
+
+// Derive BAP ID from a root address
+const bapId = bapIdFromAddress(rootAddress);
+
+// Derive BAP ID from a member public key (e.g., BRC-31 identity key)
+const bapId = bapIdFromPubkey(pubkeyHex);
+```
+
+## Key Derivation
+
+### Type 42 (Recommended)
+
+Uses `PrivateKey.deriveChild()` with counter-based invoice numbers:
+
+```
+Master Key (WIF)
+  -> deriveChild(masterPubKey, "bap:0")  -> Identity 0
+  -> deriveChild(masterPubKey, "bap:1")  -> Identity 1
+  -> deriveChild(masterPubKey, "bap:N")  -> Identity N
+```
+
+Each identity's BAP ID is derived from the root address at its path.
+
+### Wallet Rotation
+
+The BAP ID stays stable while the wallet root advances:
+
+```typescript
+identity.rootPath    // "bap:0" (stable, defines the BAP ID)
+identity.currentPath // "bap:0" (initially same as rootPath)
+
+// After rotation:
+identity.currentPath // "bap:0:1" then "bap:0:2", etc.
+```
+
+`rootPath` defines the identity. `currentPath` is the active wallet/signing root.
+
+### BIP32 (Legacy)
+
+Uses hierarchical deterministic derivation:
+
+```
+m/424150'/0'/0'/[identity]/[key]/[index]
+```
+
+BIP32 mode is deprecated. Use Type 42 for new projects.
+
+## Backup Format
+
+### Master Backup (Type 42)
+
+```json
+{
+  "rootPk": "L...",
+  "ids": "<encrypted blob>",
+  "label": "My Identities",
+  "createdAt": "2024-01-01T00:00:00.000Z"
 }
-
-// Utility methods for migration
-const legacyAddress = identity.getLegacyAddress();  // Pre-derivation address
-const newAddress = identity.getCurrentAddress();     // New derived address
 ```
 
-### Deprecation Notice
+### Master Backup (BIP32)
 
-The BIP32 initialization format using extended private keys (xprv) is deprecated. For new implementations, use Type 42 initialization with `{ rootPk: wifKey }`. The legacy BIP32 format remains supported for backward compatibility but should not be used in new projects.
+```json
+{
+  "xprv": "xprv...",
+  "ids": "<encrypted blob>",
+  "mnemonic": "word1 word2 ...",
+  "createdAt": "2024-01-01T00:00:00.000Z"
+}
+```
 
-### Advanced Operations
+### Account Backup
 
-For detailed API documentation, see the [Library Documentation](src/README.md).
+```json
+{
+  "wif": "L...",
+  "id": "<bapId>"
+}
+```
 
-## Applications
+Compatible with [bitcoin-backup](https://github.com/rohenaz/bitcoin-backup).
 
-### Primary Use Cases
+## CLI
 
-- **Decentralized Authentication**: Replace passwords with cryptographic proofs
-- **Portable Reputation**: Carry verified history across platforms
-- **Regulatory Compliance**: Reusable KYC with selective disclosure
-- **Digital Signatures**: Legally binding with blockchain timestamps
+The `bap` CLI manages identities from the terminal. Config is stored at `~/.bap/`.
 
-### Integration with UI Components
-
-For React applications, [BigBlocks](https://bigblocks.dev) provides production-ready components for BAP integration:
+### Identity Management
 
 ```bash
-npm install bigblocks
+bap create [--name <label>] [--wif <wif>]   # Create new identity
+bap list                                      # List all identities (* = active)
+bap use <bapId>                               # Set active identity
+bap info                                      # Show active identity details
+bap remove <bapId>                            # Remove identity
 ```
 
-```jsx
-import { BitcoinAuth } from 'bigblocks';
+### Backup
 
-<BitcoinAuth 
-  onAuthenticated={(identity) => {
-    console.log('Authenticated:', identity);
-  }}
-/>
+```bash
+bap export                                    # Export master backup (JSON to stdout)
+bap export-account [--id <bapId>]             # Export account backup (WIF + bapId)
+bap import <file>                             # Import from backup file
 ```
 
-## Protocol Specification
+### Crypto
 
-For complete technical specification including transaction formats, URN structures, and validation rules, see [PROTOCOL.md](PROTOCOL.md).
+```bash
+bap encrypt <data>                            # Encrypt with master key (ECIES)
+bap decrypt <ciphertext>                      # Decrypt with master key
+bap verify <message> <signature> <address>    # Verify BSM signature
+```
 
-## Related Work
+### API Lookups
 
-- [Type 42 Key Derivation](docs/TYPE42_MIGRATION.md) - Modern derivation method for enhanced privacy
-- [Author Identity Protocol](https://github.com/b-open-io/aip) - Foundational signing protocol
-- [Bitcoin Backup](https://github.com/rohenaz/bitcoin-backup) - Compatible backup format specification
+```bash
+bap lookup <bapId>                            # Lookup identity on overlay
+bap lookup-address <address>                  # Lookup identity by address
+bap attestations <hash>                       # Get attestations for attribute hash
+```
 
-## Contributing
+### Utilities
 
-We welcome contributions. See [Contributing Guidelines](CONTRIBUTING.md).
+```bash
+bap id-from-address <address>                 # Derive BAP ID from address
+bap id-from-pubkey <pubkey>                   # Derive BAP ID from pubkey
+```
+
+### Examples
+
+```bash
+# Create your first identity
+bap create --name "Personal"
+
+# Create a second identity
+bap create --name "Work"
+
+# List and switch
+bap list
+bap use <work-bap-id>
+
+# Export account for a BRC-100 wallet
+bap export-account > account.json
+
+# Lookup someone on the network
+bap lookup <their-bap-id>
+
+# Encrypt a note to yourself
+bap encrypt "remember: office safe combo is 1234" > note.enc
+cat note.enc | xargs bap decrypt
+```
+
+## Migration from 0.1.x
+
+### Breaking Changes
+
+| 0.1.x | 0.2.0 | Notes |
+|-------|-------|-------|
+| `identity.identityKey` | `identity.bapId` | Renamed for clarity |
+| `identity.getIdentityKey()` | `identity.bapId` | Now a property |
+| `identity.idName` | Removed | Use external labels |
+| `identity.setAttribute()` | Removed | Attributes removed from core |
+| `identity.signMessage()` | Removed | Use BRC-100 wallet |
+| `identity.encrypt/decrypt()` | Removed from MasterID | Use `bap.encrypt/decrypt()` for master-level |
+| `identity.getEncryptionPublicKey()` | Removed | Use BRC-100 wallet |
+| `identity.getCurrentAddress()` | Removed | Use `identity.getAccountKey()` |
+| `MemberID` class | Removed | Use `identity.exportAccountBackup()` |
+| `exportMemberBackup()` | `exportAccountBackup()` | Returns `{ wif, id }` |
+
+### Migration Path
+
+```typescript
+// 0.1.x
+const identity = bap.newId('My Identity');
+const key = identity.getIdentityKey();
+const addr = identity.getCurrentAddress();
+const { address, signature } = identity.signMessage(msg);
+
+// 0.2.0
+const identity = bap.newId();
+const key = identity.bapId;
+const accountKey = identity.getAccountKey(); // PrivateKey for BRC-100 wallet
+const backup = identity.exportAccountBackup(); // { wif, id }
+```
+
+## Protocol
+
+For the complete BAP protocol specification, see [PROTOCOL.md](PROTOCOL.md).
+
+## Related
+
+- [Type 42 Key Derivation](docs/TYPE42_MIGRATION.md) - Modern derivation method
+- [Author Identity Protocol](https://github.com/b-open-io/aip) - Signing protocol
+- [Bitcoin Backup](https://github.com/rohenaz/bitcoin-backup) - Compatible backup format
 
 ## License
 
