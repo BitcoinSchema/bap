@@ -68,3 +68,6 @@ dist
 coverage
 module
 docs
+
+# Compiled Swift binary (built from swift/Sources/main.swift)
+swift/keychain-helper

@@ -16,7 +16,7 @@ function freshHome(): string {
 function run(...args: string[]): { stdout: string; stderr: string; exitCode: number } {
 	const result = Bun.spawnSync(["bun", "src/cli.ts", ...args], {
 		cwd: "/Users/satchmo/code/bap",
-		env: { ...process.env, HOME: testHome },
+		env: { ...process.env, HOME: testHome, BAP_NO_TOUCHID: "1" },
 	});
 	return {
 		stdout: result.stdout.toString(),
@@ -229,14 +229,14 @@ describe("CLI: export / import roundtrip", () => {
 		const newHome = freshHome();
 		const importResult = Bun.spawnSync(["bun", "src/cli.ts", "import", backupFile], {
 			cwd: "/Users/satchmo/code/bap",
-			env: { ...process.env, HOME: newHome },
+			env: { ...process.env, HOME: newHome, BAP_NO_TOUCHID: "1" },
 		});
 		expect(importResult.exitCode).toBe(0);
 
 		// Verify identities match
 		const listResult = Bun.spawnSync(["bun", "src/cli.ts", "list"], {
 			cwd: "/Users/satchmo/code/bap",
-			env: { ...process.env, HOME: newHome },
+			env: { ...process.env, HOME: newHome, BAP_NO_TOUCHID: "1" },
 		});
 		const listOut = listResult.stdout.toString();
 		expect(listOut.split("\n").filter((l) => l.trim()).length).toBe(1);
@@ -546,11 +546,11 @@ describe("CLI: edge cases", () => {
 		const newHome = freshHome();
 		Bun.spawnSync(["bun", "src/cli.ts", "import", backupFile], {
 			cwd: "/Users/satchmo/code/bap",
-			env: { ...process.env, HOME: newHome },
+			env: { ...process.env, HOME: newHome, BAP_NO_TOUCHID: "1" },
 		});
 		const listResult = Bun.spawnSync(["bun", "src/cli.ts", "list"], {
 			cwd: "/Users/satchmo/code/bap",
-			env: { ...process.env, HOME: newHome },
+			env: { ...process.env, HOME: newHome, BAP_NO_TOUCHID: "1" },
 		});
 		const lines = listResult.stdout.toString().split("\n").filter((l) => l.trim());
 		expect(lines.length).toBe(3);
@@ -578,11 +578,11 @@ describe("CLI: deterministic WIF", () => {
 		const newHome = freshHome();
 		Bun.spawnSync(["bun", "src/cli.ts", "create", "--wif", wif], {
 			cwd: "/Users/satchmo/code/bap",
-			env: { ...process.env, HOME: newHome },
+			env: { ...process.env, HOME: newHome, BAP_NO_TOUCHID: "1" },
 		});
 		const info2Result = Bun.spawnSync(["bun", "src/cli.ts", "info"], {
 			cwd: "/Users/satchmo/code/bap",
-			env: { ...process.env, HOME: newHome },
+			env: { ...process.env, HOME: newHome, BAP_NO_TOUCHID: "1" },
 		});
 		const info2 = info2Result.stdout.toString();
 		const bapId2 = info2.split("\n").find((l) => l.includes("BAP ID:"))?.split("BAP ID:")[1]?.trim();
@@ -592,5 +592,57 @@ describe("CLI: deterministic WIF", () => {
 		expect(addr1).toBe(addr2);
 
 		rmSync(newHome, { recursive: true, force: true });
+	});
+});
+
+describe("CLI: touchid commands", () => {
+	test("touchid status shows availability (no identity)", () => {
+		const { stdout, exitCode } = run("touchid", "status");
+		expect(exitCode).toBe(0);
+		expect(stdout).toContain("Touch ID Status:");
+		expect(stdout).toContain("Available:");
+		expect(stdout).toContain("Biometry:");
+		expect(stdout).toContain("Key Protected: false");
+	});
+
+	test("touchid status shows unprotected when identity exists", () => {
+		run("create", "--name", "Test");
+		const { stdout, exitCode } = run("touchid", "status");
+		expect(exitCode).toBe(0);
+		expect(stdout).toContain("Key Protected: false");
+	});
+
+	test("touchid enable fails without identity", () => {
+		const { exitCode, stderr } = run("touchid", "enable");
+		expect(exitCode).toBe(1);
+		expect(stderr).toContain("No identity found");
+	});
+
+	test("touchid disable reports nothing to do without protection", () => {
+		run("create", "--name", "Test");
+		const { stdout, exitCode } = run("touchid", "disable");
+		expect(exitCode).toBe(0);
+		expect(stdout).toContain("not Touch ID protected");
+	});
+
+	test("--no-touchid flag stores plaintext rootPk", () => {
+		const { exitCode } = run("create", "--no-touchid", "--name", "NoTouch");
+		expect(exitCode).toBe(0);
+
+		const config = JSON.parse(readFileSync(join(testConfigDir, "identity.json"), "utf-8"));
+		expect(config.rootPk).toBeTruthy();
+		expect(config.rootPkEncrypted).toBeUndefined();
+	});
+
+	test("touchid shows in --help", () => {
+		const { stdout } = run("--help");
+		expect(stdout).toContain("touchid");
+	});
+
+	test("touchid subcommands show in touchid --help", () => {
+		const { stdout } = run("touchid", "--help");
+		expect(stdout).toContain("status");
+		expect(stdout).toContain("enable");
+		expect(stdout).toContain("disable");
 	});
 });

@@ -27,6 +27,7 @@
     "dist/*.js.map",
     "dist/*.d.ts",
     "src/cli.ts",
+    "src/touchid.ts",
     "README.md",
     "LICENSE"
   ],
@@ -49,10 +50,14 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "@1sat/vault": "file:../1sat-sdk/packages/vault",
     "commander": "^14.0.3",
     "schema-dts": "^1.1.5"
   },
   "peerDependencies": {
     "@bsv/sdk": "^2.0.1"
-  }
+  },
+  "trustedDependencies": [
+    "@1sat/vault"
+  ]
 }
