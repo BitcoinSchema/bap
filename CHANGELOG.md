@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.3.1] - 2026-05-22
+
+### Fixed
+- `MasterID.getAccountKey()` now returns the per-identity member key (`master.deriveChild(masterPub, rootPath)` for Type 42, `HD.derive(rootPath).privKey` for BIP32) instead of the unmodified master/HD root. Previously every identity returned the same master key, so consumers building BRC-100 wallets from `exportAccountBackup().wif` ended up with the same wallet root across all identities — and that wallet root didn't match what bsv-bap used internally to compute `bapId`, producing different bapIds on the wallet and identity sides.
+
 ## [0.3.0] - 2026-05-22
 
 ### Changed
