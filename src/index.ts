@@ -30,7 +30,7 @@ import type {
   OldIdentity,
   PathPrefix,
 } from "./interface";
-import { Utils } from "./utils";
+import { Utils, deriveIdentity0Address } from "./utils";
 const { toArray, toUTF8, toBase64, toHex } = BSVUtils;
 const { electrumEncrypt, electrumDecrypt } = ECIES;
 
@@ -140,22 +140,20 @@ export class BAP {
   }
 
   checkIdBelongs(bapId: MasterID): boolean {
-    let checkRootAddress: string;
+    let walletRoot: PrivateKey;
 
     if (this.#isType42) {
       if (!this.#masterPrivateKey) throw new Error("Master private key not initialized");
-      const derivedKey = this.#masterPrivateKey.deriveChild(
+      walletRoot = this.#masterPrivateKey.deriveChild(
         this.#masterPrivateKey.toPublicKey(),
         bapId.rootPath
       );
-      checkRootAddress = derivedKey.toPublicKey().toAddress();
     } else {
       if (!this.#HDPrivateKey) throw new Error("HD private key not initialized");
-      const derivedChild = this.#HDPrivateKey.derive(bapId.rootPath);
-      checkRootAddress = derivedChild.pubKey.toAddress();
+      walletRoot = this.#HDPrivateKey.derive(bapId.rootPath).privKey;
     }
 
-    if (checkRootAddress !== bapId.rootAddress) {
+    if (deriveIdentity0Address(walletRoot) !== bapId.rootAddress) {
       throw new Error("ID does not belong to this private key");
     }
 

@@ -1,4 +1,11 @@
-import { Hash, PublicKey, Utils as BSVUtils } from "@bsv/sdk";
+import {
+  Hash,
+  KeyDeriver,
+  type PrivateKey,
+  PublicKey,
+  Utils as BSVUtils,
+} from "@bsv/sdk";
+import { BAP_KEY_ID, BAP_PROTOCOL_ID } from "./constants.js";
 import type { PathPrefix } from "./interface.js";
 
 const { toHex, toBase58 } = BSVUtils;
@@ -32,6 +39,27 @@ export function bapIdFromAddress(address: string): string {
 export function bapIdFromPubkey(pubkeyHex: string): string {
   const pubkey = PublicKey.fromString(pubkeyHex);
   return bapIdFromAddress(pubkey.toAddress());
+}
+
+/**
+ * Derive the BAP identity-0 address from a BRC-100 wallet root private key.
+ *
+ * Matches @1sat/actions: derives the public key at protocolID `[1, "sigma"]`,
+ * keyID `"identity-0"`, counterparty `"self"` (forSelf=true), then converts to
+ * a P2PKH address. The bapId is computed from this address.
+ *
+ * BRC-100 wallets don't allow signing with the wallet root itself, so the
+ * "root" used for bapId derivation is this first standard-derived signing key.
+ */
+export function deriveIdentity0Address(walletRoot: PrivateKey): string {
+  const keyDeriver = new KeyDeriver(walletRoot);
+  const identity0 = keyDeriver.derivePublicKey(
+    BAP_PROTOCOL_ID,
+    `${BAP_KEY_ID}-0`,
+    "self",
+    true,
+  );
+  return identity0.toAddress();
 }
 
 export const Utils = {

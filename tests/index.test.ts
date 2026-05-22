@@ -18,8 +18,7 @@ import oldFullId from "./data/old-ids.json";
 const { toArray } = Utils;
 
 // Old test data uses identityKey format — BAP handles import via OldIdentity path
-const legacyIdentityKey =
-  "4a59332b7d81c4c68a6edcb1160f4683037a97286b97cc500b5881632e921849z";
+const legacyIdentityKey = "UehrqY6scwcfNePKEFbPP8DSuxW";
 
 describe("BAP class", () => {
   test("should initialize with random HD private key", () => {

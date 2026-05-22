@@ -10,5 +10,13 @@ export const MAX_INT = 2147483648 - 1; // 0x80000000
 
 export const SIGNING_PATH_PREFIX = "m/424150'/0'/0'"; // BAP in hex
 
+// BRC-100 derivation that defines the canonical BAP identity-0 key.
+// Mirrors @1sat/actions: ctx.wallet.getPublicKey({ protocolID: BAP_PROTOCOL_ID,
+// keyID: `${BAP_KEY_ID}-0`, counterparty: 'self' }). bapId is derived from the
+// resulting address — not from the BRC-100 wallet root itself, since BRC-100
+// wallets don't expose root-key signing.
+export const BAP_PROTOCOL_ID: [1, "sigma"] = [1, "sigma"];
+export const BAP_KEY_ID = "identity";
+
 // Used by the BAP class for encrypting the identity list in the master backup
 export const ENCRYPTION_PATH = `m/424150'/${MAX_INT}'/${MAX_INT}'`;

@@ -14,7 +14,7 @@ import type {
   Identity,
   OldIdentity,
 } from "./interface";
-import { Utils, bapIdFromAddress } from "./utils";
+import { Utils, bapIdFromAddress, deriveIdentity0Address } from "./utils";
 
 interface Type42KeySource {
   rootPk: PrivateKey;
@@ -63,31 +63,31 @@ class MasterID {
     this.#previousPath = `${SIGNING_PATH_PREFIX}/0/0/0`;
     this.#currentPath = `${SIGNING_PATH_PREFIX}/0/0/1`;
 
+    let walletRoot: PrivateKey;
     if (this.#isType42) {
       if (!this.#masterPrivateKey) throw new Error("Master private key not initialized");
-      const rootKey = this.#masterPrivateKey.deriveChild(
+      walletRoot = this.#masterPrivateKey.deriveChild(
         this.#masterPrivateKey.toPublicKey(),
         this.#rootPath
       );
-      this.rootAddress = rootKey.toPublicKey().toAddress();
     } else {
       if (!this.#HDPrivateKey) throw new Error("HD private key not initialized");
-      const rootChild = this.#HDPrivateKey.derive(this.#rootPath);
-      this.rootAddress = rootChild.privKey.toPublicKey().toAddress();
+      walletRoot = this.#HDPrivateKey.derive(this.#rootPath).privKey;
     }
 
+    this.rootAddress = deriveIdentity0Address(walletRoot);
     this.bapId = bapIdFromAddress(this.rootAddress);
   }
 
   set rootPath(path: string) {
+    let walletRoot: PrivateKey;
     if (this.#isType42) {
       this.#rootPath = path;
       if (!this.#masterPrivateKey) throw new Error("Master private key not initialized");
-      const derivedKey = this.#masterPrivateKey.deriveChild(
+      walletRoot = this.#masterPrivateKey.deriveChild(
         this.#masterPrivateKey.toPublicKey(),
         path
       );
-      this.rootAddress = derivedKey.toPublicKey().toAddress();
       this.#previousPath = path;
       this.#currentPath = path;
     } else {
@@ -100,11 +100,11 @@ class MasterID {
       }
       this.#rootPath = pathToUse;
       if (!this.#HDPrivateKey) throw new Error("HD private key not initialized");
-      const derivedChild = this.#HDPrivateKey.derive(pathToUse);
-      this.rootAddress = derivedChild.pubKey.toAddress();
+      walletRoot = this.#HDPrivateKey.derive(pathToUse).privKey;
       this.#previousPath = pathToUse;
       this.#currentPath = pathToUse;
     }
+    this.rootAddress = deriveIdentity0Address(walletRoot);
     this.bapId = bapIdFromAddress(this.rootAddress);
   }
 

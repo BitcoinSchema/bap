@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.3.0] - 2026-05-22
+
+### Changed
+- **Breaking:** `MasterID.rootAddress` now derives from the BRC-100 wallet's `identity-0` key (protocolID `[1, "sigma"]`, keyID `"identity-0"`, counterparty `self`, forSelf=true) instead of from the raw wallet-root address. `bapId` consequently changes for every identity. Aligns with `@1sat/actions` `computeBapId`, which BRC-100 wallets use when publishing — previously the two sides disagreed on what address to hash, producing different bapIds for the same identity.
+- `BAP.checkIdBelongs` updated to use the new derivation.
+
+### Added
+- `BAP_PROTOCOL_ID = [1, "sigma"]` and `BAP_KEY_ID = "identity"` constants.
+- `deriveIdentity0Address(walletRoot)` helper in `src/utils.ts`.
+
 ## [0.2.0] - 2026-03-16
 
 ### Breaking Changes
