@@ -1,14 +1,14 @@
 import {
-  BSM,
   BigNumber,
+  BSM,
+  Utils as BSVUtils,
   ECIES,
+  Hash,
   HD,
   OP,
-  Signature,
   PrivateKey,
+  Signature,
 } from "@bsv/sdk";
-
-import { Utils as BSVUtils } from "@bsv/sdk";
 import { type APIFetcher, apiFetcher } from "./api";
 import type {
   AttestationValidResponse,
@@ -22,19 +22,28 @@ import {
   BAP_SERVER,
   ENCRYPTION_PATH,
 } from "./constants";
-import { MasterID } from "./MasterID";
 import type {
   Attestation,
   BapAccountBackup,
   Identity,
+  LegacyIdRecompute,
   OldIdentity,
   PathPrefix,
 } from "./interface";
-import { Utils, deriveIdentity0Address } from "./utils";
+import { MasterID } from "./MasterID";
+import { deriveIdentity0Address, Utils } from "./utils";
+
 const { toArray, toUTF8, toBase64, toHex } = BSVUtils;
 const { electrumEncrypt, electrumDecrypt } = ECIES;
 
 type Identities = { lastIdPath: string; ids: Identity[] };
+
+type ParsedIdEntry = {
+  bapId: string;
+  rootPath: string;
+  rootAddress: string;
+  idSeed: string;
+};
 
 /** Backup format for Type 42 mode (rootPk-based) */
 export interface Type42MasterBackup {
@@ -94,7 +103,8 @@ export class BAP {
 
   getPublicKey(childPath = ""): string {
     if (this.#isType42) {
-      if (!this.#masterPrivateKey) throw new Error("Master private key not initialized");
+      if (!this.#masterPrivateKey)
+        throw new Error("Master private key not initialized");
       if (childPath) {
         const derivedKey = this.#masterPrivateKey.deriveChild(
           this.#masterPrivateKey.toPublicKey(),
@@ -143,13 +153,15 @@ export class BAP {
     let walletRoot: PrivateKey;
 
     if (this.#isType42) {
-      if (!this.#masterPrivateKey) throw new Error("Master private key not initialized");
+      if (!this.#masterPrivateKey)
+        throw new Error("Master private key not initialized");
       walletRoot = this.#masterPrivateKey.deriveChild(
         this.#masterPrivateKey.toPublicKey(),
         bapId.rootPath
       );
     } else {
-      if (!this.#HDPrivateKey) throw new Error("HD private key not initialized");
+      if (!this.#HDPrivateKey)
+        throw new Error("HD private key not initialized");
       walletRoot = this.#HDPrivateKey.derive(bapId.rootPath).privKey;
     }
 
@@ -160,12 +172,138 @@ export class BAP {
     return true;
   }
 
+  /**
+   * Compute the pre-0.3 (legacy) rootAddress for an identity entry: the
+   * address of the key derived at rootPath (seeded by idSeed when present),
+   * with NO identity-0 child derivation. This is how bsv-bap <= 0.2.x
+   * computed Identity.rootAddress before the BRC-100 identity-0 change
+   * (0.3.0), which is intentionally NOT backward compatible.
+   */
+  #legacyRootAddress(rootPath: string, idSeed = ""): string {
+    if (this.#isType42) {
+      if (!this.#masterPrivateKey)
+        throw new Error("Master private key not initialized");
+      let base = this.#masterPrivateKey;
+      if (idSeed) {
+        const seedHex = toHex(Hash.sha256(idSeed, "utf8"));
+        base = base.deriveChild(base.toPublicKey(), seedHex);
+      }
+      return base
+        .deriveChild(base.toPublicKey(), rootPath)
+        .toPublicKey()
+        .toAddress();
+    }
+    if (!this.#HDPrivateKey) throw new Error("HD private key not initialized");
+    let baseHd = this.#HDPrivateKey;
+    if (idSeed) {
+      const seedHex = toHex(Hash.sha256(idSeed, "utf8"));
+      baseHd = baseHd.derive(Utils.getSigningPathFromHex(seedHex));
+    }
+    return baseHd.derive(rootPath).pubKey.toAddress();
+  }
+
+  /** Normalize an ids export (encrypted string, Identities object, or old array). */
+  #parseIdsExport(
+    idData: Identities | OldIdentity[] | string
+  ): ParsedIdEntry[] {
+    let parsed: unknown = idData;
+    if (typeof parsed === "string") {
+      parsed = JSON.parse(this.decrypt(parsed));
+    }
+    const entries = Array.isArray(parsed)
+      ? (parsed as OldIdentity[])
+      : (parsed as Identities | undefined)?.ids;
+    if (!Array.isArray(entries)) {
+      throw new Error("Unrecognized identities format");
+    }
+    return entries.map((entry) => ({
+      bapId:
+        ("bapId" in entry ? entry.bapId : (entry as OldIdentity).identityKey) ??
+        "",
+      rootPath: entry.rootPath,
+      rootAddress: entry.rootAddress,
+      idSeed: entry.idSeed ?? "",
+    }));
+  }
+
+  /**
+   * Check whether an ids export was produced by bsv-bap <= 0.2.x with this
+   * key: every entry's stored rootAddress must match the legacy derivation
+   * of its rootPath. Returns false for current-format exports and for
+   * exports that belong to a different key.
+   */
+  isLegacyIdsExport(idData: Identities | OldIdentity[] | string): boolean {
+    let entries: ParsedIdEntry[];
+    try {
+      entries = this.#parseIdsExport(idData);
+    } catch {
+      return false;
+    }
+    return (
+      entries.length > 0 &&
+      entries.every(
+        (entry) =>
+          entry.rootPath &&
+          entry.rootAddress &&
+          this.#legacyRootAddress(entry.rootPath, entry.idSeed) ===
+            entry.rootAddress
+      )
+    );
+  }
+
+  /**
+   * Recompute identities from a legacy (<= 0.2.x) export under the current
+   * BRC-100 identity-0 derivation. Each entry is verified against the
+   * legacy formula first — proving the export belongs to this key — then
+   * re-derived at its original rootPath/idSeed. The underlying keys are
+   * unchanged; the bapIds are NEW. Callers must re-export (`exportIds`)
+   * and reissue the backup file; the legacy export is obsolete after this.
+   *
+   * @throws if any entry does not match the legacy derivation either
+   * (wrong key or unrecognized format) — never silently accepts.
+   */
+  recomputeLegacyIds(
+    idData: Identities | OldIdentity[] | string
+  ): LegacyIdRecompute[] {
+    const entries = this.#parseIdsExport(idData);
+    const recomputed: LegacyIdRecompute[] = [];
+
+    for (const entry of entries) {
+      if (!entry.rootPath) {
+        throw new Error("Legacy entry is missing rootPath; cannot recompute");
+      }
+      if (
+        this.#legacyRootAddress(entry.rootPath, entry.idSeed) !==
+        entry.rootAddress
+      ) {
+        throw new Error("ID does not belong to this private key");
+      }
+
+      const identity = this.newId(entry.rootPath, entry.idSeed);
+      recomputed.push({
+        oldBapId: entry.bapId,
+        newBapId: identity.bapId,
+        rootPath: entry.rootPath,
+      });
+
+      // Keep the Type 42 counter monotonic so a later argument-less newId()
+      // cannot collide with a recomputed bap:N identity.
+      if (this.#isType42 && entry.rootPath.startsWith("bap:")) {
+        const counter = Number.parseInt(entry.rootPath.split(":")[1], 10);
+        if (!Number.isNaN(counter)) {
+          this.#identityCounter = Math.max(this.#identityCounter, counter + 1);
+        }
+      }
+    }
+
+    return recomputed;
+  }
+
   listIds(): string[] {
     return Object.keys(this.#ids);
   }
 
   newId(customPath?: string, idSeed = ""): MasterID {
-
     let pathToUse: string;
     if (customPath) {
       pathToUse = customPath;
@@ -178,10 +316,12 @@ export class BAP {
 
     let newIdentity: MasterID;
     if (this.#isType42) {
-      if (!this.#masterPrivateKey) throw new Error("Type 42 parameters not initialized");
+      if (!this.#masterPrivateKey)
+        throw new Error("Type 42 parameters not initialized");
       newIdentity = new MasterID({ rootPk: this.#masterPrivateKey }, idSeed);
     } else {
-      if (!this.#HDPrivateKey) throw new Error("HD private key not initialized");
+      if (!this.#HDPrivateKey)
+        throw new Error("HD private key not initialized");
       newIdentity = new MasterID(this.#HDPrivateKey, idSeed);
     }
 
@@ -247,10 +387,12 @@ export class BAP {
 
       let importId: MasterID;
       if (this.#isType42) {
-        if (!this.#masterPrivateKey) throw new Error("Type 42 parameters not initialized");
+        if (!this.#masterPrivateKey)
+          throw new Error("Type 42 parameters not initialized");
         importId = new MasterID({ rootPk: this.#masterPrivateKey }, id.idSeed);
       } else {
-        if (!this.#HDPrivateKey) throw new Error("HD private key not initialized");
+        if (!this.#HDPrivateKey)
+          throw new Error("HD private key not initialized");
         importId = new MasterID(this.#HDPrivateKey, id.idSeed);
       }
 
@@ -262,12 +404,15 @@ export class BAP {
       this.checkIdBelongs(importId);
       this.#ids[importId.bapId] = importId;
 
-      if (this.#isType42 && importId.rootPath.startsWith('bap:')) {
-        const pathParts = importId.rootPath.split(':');
+      if (this.#isType42 && importId.rootPath.startsWith("bap:")) {
+        const pathParts = importId.rootPath.split(":");
         if (pathParts.length >= 2) {
           const counter = Number.parseInt(pathParts[1], 10);
           if (!Number.isNaN(counter)) {
-            this.#identityCounter = Math.max(this.#identityCounter, counter + 1);
+            this.#identityCounter = Math.max(
+              this.#identityCounter,
+              counter + 1
+            );
           }
         }
       }
@@ -295,10 +440,15 @@ export class BAP {
     for (const id of idData) {
       let importId: MasterID;
       if (this.#isType42) {
-        if (!this.#masterPrivateKey) throw new Error("Type 42 parameters not initialized");
-        importId = new MasterID({ rootPk: this.#masterPrivateKey }, id.idSeed ?? "");
+        if (!this.#masterPrivateKey)
+          throw new Error("Type 42 parameters not initialized");
+        importId = new MasterID(
+          { rootPk: this.#masterPrivateKey },
+          id.idSeed ?? ""
+        );
       } else {
-        if (!this.#HDPrivateKey) throw new Error("HD private key not initialized");
+        if (!this.#HDPrivateKey)
+          throw new Error("HD private key not initialized");
         importId = new MasterID(this.#HDPrivateKey, id.idSeed ?? "");
       }
 
@@ -345,7 +495,8 @@ export class BAP {
 
   encrypt(string: string): string {
     if (this.#isType42) {
-      if (!this.#masterPrivateKey) throw new Error("Master private key not initialized");
+      if (!this.#masterPrivateKey)
+        throw new Error("Master private key not initialized");
       const encryptionKey = this.#masterPrivateKey.deriveChild(
         this.#masterPrivateKey.toPublicKey(),
         ENCRYPTION_PATH
@@ -357,21 +508,18 @@ export class BAP {
 
     if (!this.#HDPrivateKey) throw new Error("HD private key not initialized");
     const derivedChild = this.#HDPrivateKey.derive(ENCRYPTION_PATH);
-    return toBase64(
-      electrumEncrypt(toArray(string), derivedChild.pubKey)
-    );
+    return toBase64(electrumEncrypt(toArray(string), derivedChild.pubKey));
   }
 
   decrypt(string: string): string {
     if (this.#isType42) {
-      if (!this.#masterPrivateKey) throw new Error("Master private key not initialized");
+      if (!this.#masterPrivateKey)
+        throw new Error("Master private key not initialized");
       const encryptionKey = this.#masterPrivateKey.deriveChild(
         this.#masterPrivateKey.toPublicKey(),
         ENCRYPTION_PATH
       );
-      return toUTF8(
-        electrumDecrypt(toArray(string, "base64"), encryptionKey)
-      );
+      return toUTF8(electrumDecrypt(toArray(string, "base64"), encryptionKey));
     }
 
     if (!this.#HDPrivateKey) throw new Error("HD private key not initialized");
@@ -442,7 +590,10 @@ export class BAP {
           recovery,
           new BigNumber(BSM.magicHash(msg))
         );
-        if (BSM.verify(msg, sig, publicKey) && publicKey.toAddress() === address) {
+        if (
+          BSM.verify(msg, sig, publicKey) &&
+          publicKey.toAddress() === address
+        ) {
           return true;
         }
       } catch {
@@ -458,7 +609,11 @@ export class BAP {
     challenge: string,
     signature: string
   ): Promise<boolean> {
-    const localVerification = this.verifySignature(challenge, address, signature);
+    const localVerification = this.verifySignature(
+      challenge,
+      address,
+      signature
+    );
     if (!localVerification) return false;
 
     try {
@@ -476,21 +631,32 @@ export class BAP {
     tx: number[][]
   ): Promise<AttestationValidResponse | false> {
     if (this.verifyAttestationWithAIP(tx)) {
-      return this.getApiData<AttestationValidResponse>("/attestation/valid", { tx });
+      return this.getApiData<AttestationValidResponse>("/attestation/valid", {
+        tx,
+      });
     }
     return false;
   }
 
-  async getIdentityFromAddress(address: string): Promise<GetIdentityByAddressResponse> {
-    return this.getApiData<GetIdentityByAddressResponse>("/identity/validByAddress", { address });
+  async getIdentityFromAddress(
+    address: string
+  ): Promise<GetIdentityByAddressResponse> {
+    return this.getApiData<GetIdentityByAddressResponse>(
+      "/identity/validByAddress",
+      { address }
+    );
   }
 
   async getIdentity(idKey: string): Promise<GetIdentityResponse> {
     return this.getApiData<GetIdentityResponse>("/identity/get", { idKey });
   }
 
-  async getAttestationsForHash(attestationHash: string): Promise<GetAttestationResponse> {
-    return this.getApiData<GetAttestationResponse>("/attestations", { hash: attestationHash });
+  async getAttestationsForHash(
+    attestationHash: string
+  ): Promise<GetAttestationResponse> {
+    return this.getApiData<GetAttestationResponse>("/attestations", {
+      hash: attestationHash,
+    });
   }
 
   exportForBackup(
@@ -506,7 +672,8 @@ export class BAP {
     };
 
     if (this.#isType42) {
-      if (!this.#masterPrivateKey) throw new Error("Type 42 parameters not initialized");
+      if (!this.#masterPrivateKey)
+        throw new Error("Type 42 parameters not initialized");
       return { ...baseBackup, rootPk: this.#masterPrivateKey.toWif() };
     }
 

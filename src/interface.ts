@@ -36,6 +36,20 @@ export interface Identities {
   ids: Identity[];
 }
 
+/**
+ * Result of recomputing one legacy (pre-0.3) identity under the current
+ * BRC-100 identity-0 derivation. The underlying keys are unchanged; only
+ * the derived rootAddress/bapId differ.
+ */
+export interface LegacyIdRecompute {
+  /** bapId recorded in the legacy export (pre-0.3 derivation). */
+  oldBapId: string;
+  /** bapId for the same key material under the current derivation. */
+  newBapId: string;
+  /** Derivation path the identity was re-created at. */
+  rootPath: string;
+}
+
 export type PathPrefix =
   | `/${number}/${number}/${number}`
   | `/${number}'/${number}'/${number}'`;
