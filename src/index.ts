@@ -692,6 +692,7 @@ export type {
   Attestation,
   BapAccountBackup,
   Identity,
+  LegacyIdRecompute,
   PathPrefix,
   Type42Params,
 };
