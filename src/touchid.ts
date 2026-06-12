@@ -43,7 +43,7 @@ export async function unlockRootKey(sentinel: string): Promise<string> {
   if (!sentinel.startsWith("se:")) {
     throw new Error(
       `Unrecognized vault format: "${sentinel.slice(0, 20)}...". ` +
-      'Old Keychain format is no longer supported. Re-import your backup with "bap import <file>".',
+        'Old Keychain format is no longer supported. Re-import your backup with "bap import <file>".'
     );
   }
   const label = sentinel.slice(3);

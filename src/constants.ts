@@ -1,4 +1,5 @@
 import { Utils } from "@bsv/sdk";
+
 const { toHex, toArray } = Utils;
 
 export const BAP_BITCOM_ADDRESS = "1BAPSuaPnfGnSBM3GLV9yhxUdYe4vGbdMT";

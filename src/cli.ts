@@ -178,7 +178,9 @@ async function tryProtectWithTouchID(
     const msg = err instanceof Error ? err.message : String(err);
     console.log(`  Touch ID:      skipped (${msg})`);
     console.log("  WARNING: Key is stored as plaintext on disk.");
-    console.log("  Run 'bap touchid enable' later to protect it with Secure Enclave.");
+    console.log(
+      "  Run 'bap touchid enable' later to protect it with Secure Enclave."
+    );
     return null;
   }
 }
@@ -190,7 +192,7 @@ const program = new Command();
 program
   .name("bap")
   .description("BAP - Bitcoin Attestation Protocol CLI")
-  .version("0.2.0");
+  .version("0.3.2");
 
 // Identity Management
 
@@ -252,8 +254,12 @@ program
     console.log(`  Root Path:     ${identity.rootPath}`);
     console.log(`  Stored at:     ${CONFIG_FILE}`);
     console.log("");
-    console.log("  IMPORTANT: Back up your identity now with 'bap export > backup.json'.");
-    console.log("  If Touch ID is enabled, your key is hardware-bound and cannot be");
+    console.log(
+      "  IMPORTANT: Back up your identity now with 'bap export > backup.json'."
+    );
+    console.log(
+      "  If Touch ID is enabled, your key is hardware-bound and cannot be"
+    );
     console.log("  recovered from another machine without this backup.");
   });
 
@@ -590,7 +596,9 @@ touchid
     }
 
     // Support legacy "wif" field from older BAP configs
-    const plainKey = config.rootPk ?? (config as Record<string, unknown>).wif as string | undefined;
+    const plainKey =
+      config.rootPk ??
+      ((config as Record<string, unknown>).wif as string | undefined);
     if (!plainKey) {
       console.error(
         "Config has no plaintext key to protect. File may be corrupt."
@@ -613,8 +621,12 @@ touchid
       process.exit(1);
     }
 
-    console.log("WARNING: Secure Enclave keys are hardware-bound to THIS machine.");
-    console.log("Export a backup first with 'bap export > backup.json' if you haven't already.\n");
+    console.log(
+      "WARNING: Secure Enclave keys are hardware-bound to THIS machine."
+    );
+    console.log(
+      "Export a backup first with 'bap export > backup.json' if you haven't already.\n"
+    );
     console.log("Encrypting identity key with Secure Enclave...");
     const rootPkEncrypted = await protectRootKey(plainKey);
 
@@ -627,7 +639,9 @@ touchid
     };
     writeFileSync(CONFIG_FILE, JSON.stringify(newConfig, null, 2));
 
-    console.log("Identity key is now protected with Secure Enclave + Touch ID.");
+    console.log(
+      "Identity key is now protected with Secure Enclave + Touch ID."
+    );
     console.log("The plaintext key has been removed from disk.");
   });
 
@@ -674,7 +688,9 @@ touchid
     await removeProtection();
 
     console.log("Secure Enclave protection removed.");
-    console.log("WARNING: Your identity key is now stored as plaintext on disk.");
+    console.log(
+      "WARNING: Your identity key is now stored as plaintext on disk."
+    );
     console.log("Anyone with access to this machine can read it.");
   });
 

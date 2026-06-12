@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
-  BSM,
   BigNumber,
+  BSM,
   HD,
   PrivateKey,
   type Signature,
@@ -9,8 +9,8 @@ import {
 } from "@bsv/sdk";
 import { BAP } from "../src";
 import { ENCRYPTION_PATH, SIGNING_PATH_PREFIX } from "../src/constants";
-import { MasterID } from "../src/MasterID";
 import type { Identities, OldIdentity } from "../src/interface";
+import { MasterID } from "../src/MasterID";
 import fullId from "./data/ids.json";
 import { HDPrivateKey, HDPublicKey } from "./data/keys";
 import oldFullId from "./data/old-ids.json";

@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 
-import { BAP } from "../src";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { BAP } from "../src";
 
 // Get xpriv from command line argument
 const xpriv = process.argv[2];

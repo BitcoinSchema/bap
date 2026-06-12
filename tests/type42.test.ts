@@ -1,6 +1,6 @@
-import { expect, test, describe } from "bun:test";
-import { BAP } from "../src/index";
+import { describe, expect, test } from "bun:test";
 import { HD } from "@bsv/sdk";
+import { BAP } from "../src/index";
 
 describe("Type 42 support in BAP", () => {
   const testHDKey =
@@ -35,7 +35,9 @@ describe("Type 42 support in BAP", () => {
 
     test("getHdPublicKey should throw error in Type 42 mode", () => {
       const bap = new BAP({ rootPk: testWif });
-      expect(() => bap.getHdPublicKey()).toThrow("HD public keys are not available in Type 42 mode");
+      expect(() => bap.getHdPublicKey()).toThrow(
+        "HD public keys are not available in Type 42 mode"
+      );
     });
   });
 
@@ -54,7 +56,11 @@ describe("Type 42 support in BAP", () => {
 
     test("exportForBackup should handle BIP32 mode", () => {
       const bap = new BAP(testHDKey);
-      const backup = bap.exportForBackup("Test Label", testHDKey, "test mnemonic");
+      const backup = bap.exportForBackup(
+        "Test Label",
+        testHDKey,
+        "test mnemonic"
+      );
 
       expect(backup).toHaveProperty("ids");
       expect(backup).toHaveProperty("xprv");

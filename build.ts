@@ -1,7 +1,7 @@
-import type { Target } from "bun";
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { gzipSync } from "node:zlib";
+import type { Target } from "bun";
 
 const commonConfig = {
   entrypoints: ["./src/index.ts"],
