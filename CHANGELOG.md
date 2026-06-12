@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.3.2] - 2026-06-12
+
+### Added
+- `BAP.isLegacyIdsExport(ids)` — detects a pre-0.3 ids export: returns true only when every entry's stored `rootAddress` matches the legacy (<= 0.2.x) derivation for this key. Returns false for current-format exports and for exports belonging to a different key.
+- `BAP.recomputeLegacyIds(ids)` — explicit opt-in recovery path for old backup files. Verifies each entry against the legacy formula (wrong-key exports still throw `"ID does not belong to this private key"`), then re-derives the identity at its original `rootPath`/`idSeed` under the current BRC-100 identity-0 scheme. Same underlying keys, NEW bapIds; returns the old→new `LegacyIdRecompute[]` mapping. Callers must `exportIds()` and reissue the backup file — the legacy export is obsolete afterward. Supports Type 42 (`rootPk`), BIP32 (`xprv`), encrypted-string payloads, the pre-0.2 array format, and seeded (`idSeed`) identities. `importIds` remains strict: 0.3.0's derivation change is intentionally not backward compatible.
+- `LegacyIdRecompute` type exported from the package root.
+
+### Fixed
+- CLI `--version` reported `0.2.0` since the 0.3.x releases (hardcoded constant and hardcoded test). The version test now reads `package.json` so drift fails in CI.
+
+
 ## [0.3.1] - 2026-05-22
 
 ### Fixed
