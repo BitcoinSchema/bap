@@ -1,9 +1,9 @@
 import {
+  Utils as BSVUtils,
   Hash,
   KeyDeriver,
   type PrivateKey,
   PublicKey,
-  Utils as BSVUtils,
 } from "@bsv/sdk";
 import { BAP_KEY_ID, BAP_PROTOCOL_ID } from "./constants.js";
 import type { PathPrefix } from "./interface.js";
@@ -57,7 +57,7 @@ export function deriveIdentity0Address(walletRoot: PrivateKey): string {
     BAP_PROTOCOL_ID,
     `${BAP_KEY_ID}-0`,
     "self",
-    true,
+    true
   );
   return identity0.toAddress();
 }
@@ -65,7 +65,7 @@ export function deriveIdentity0Address(walletRoot: PrivateKey): string {
 export const Utils = {
   /**
    * Helper function to generate cryptographically secure random bytes
-   * 
+   *
    * This follows the pattern used by BSV SDK and other Bitcoin libraries.
    * Uses crypto.getRandomValues() which is available in browsers and modern Node.js.
    *
@@ -74,7 +74,11 @@ export const Utils = {
    */
   getRandomBytes(byteLength = 32): Uint8Array {
     // Use crypto.getRandomValues() - available in browsers and Node.js 15+
-    if (typeof globalThis !== 'undefined' && globalThis.crypto && globalThis.crypto.getRandomValues) {
+    if (
+      typeof globalThis !== "undefined" &&
+      globalThis.crypto &&
+      globalThis.crypto.getRandomValues
+    ) {
       const array = new Uint8Array(byteLength);
       globalThis.crypto.getRandomValues(array);
       return array;
@@ -82,9 +86,9 @@ export const Utils = {
 
     // Fallback error - crypto operations require secure randomness
     throw new Error(
-      'Secure random number generation not available. ' +
-      'crypto.getRandomValues() is required for cryptographic operations. ' +
-      'This environment may not be suitable for secure key generation.'
+      "Secure random number generation not available. " +
+        "crypto.getRandomValues() is required for cryptographic operations. " +
+        "This environment may not be suitable for secure key generation."
     );
   },
 
@@ -96,7 +100,9 @@ export const Utils = {
    */
   getRandomString(byteLength = 32): string {
     const bytes = this.getRandomBytes(byteLength);
-    return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+    return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(
+      ""
+    );
   },
 
   /**

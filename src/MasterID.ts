@@ -1,20 +1,8 @@
-import {
-  Hash,
-  type PrivateKey,
-  HD,
-  Utils as BSVUtils,
-} from "@bsv/sdk";
+import { Utils as BSVUtils, Hash, HD, type PrivateKey } from "@bsv/sdk";
 
-import {
-  SIGNING_PATH_PREFIX,
-  MAX_INT,
-} from "./constants";
-import type {
-  BapAccountBackup,
-  Identity,
-  OldIdentity,
-} from "./interface";
-import { Utils, bapIdFromAddress, deriveIdentity0Address } from "./utils";
+import { MAX_INT, SIGNING_PATH_PREFIX } from "./constants";
+import type { BapAccountBackup, Identity, OldIdentity } from "./interface";
+import { bapIdFromAddress, deriveIdentity0Address, Utils } from "./utils";
 
 interface Type42KeySource {
   rootPk: PrivateKey;
@@ -32,10 +20,7 @@ class MasterID {
   rootAddress: string;
   bapId: string;
 
-  constructor(
-    keySource: HD | Type42KeySource,
-    idSeed = ""
-  ) {
+  constructor(keySource: HD | Type42KeySource, idSeed = "") {
     if (keySource instanceof HD) {
       this.#isType42 = false;
       if (idSeed) {
@@ -65,13 +50,15 @@ class MasterID {
 
     let walletRoot: PrivateKey;
     if (this.#isType42) {
-      if (!this.#masterPrivateKey) throw new Error("Master private key not initialized");
+      if (!this.#masterPrivateKey)
+        throw new Error("Master private key not initialized");
       walletRoot = this.#masterPrivateKey.deriveChild(
         this.#masterPrivateKey.toPublicKey(),
         this.#rootPath
       );
     } else {
-      if (!this.#HDPrivateKey) throw new Error("HD private key not initialized");
+      if (!this.#HDPrivateKey)
+        throw new Error("HD private key not initialized");
       walletRoot = this.#HDPrivateKey.derive(this.#rootPath).privKey;
     }
 
@@ -83,7 +70,8 @@ class MasterID {
     let walletRoot: PrivateKey;
     if (this.#isType42) {
       this.#rootPath = path;
-      if (!this.#masterPrivateKey) throw new Error("Master private key not initialized");
+      if (!this.#masterPrivateKey)
+        throw new Error("Master private key not initialized");
       walletRoot = this.#masterPrivateKey.deriveChild(
         this.#masterPrivateKey.toPublicKey(),
         path
@@ -99,7 +87,8 @@ class MasterID {
         throw new Error(`invalid signing path given ${pathToUse}`);
       }
       this.#rootPath = pathToUse;
-      if (!this.#HDPrivateKey) throw new Error("HD private key not initialized");
+      if (!this.#HDPrivateKey)
+        throw new Error("HD private key not initialized");
       walletRoot = this.#HDPrivateKey.derive(pathToUse).privKey;
       this.#previousPath = pathToUse;
       this.#currentPath = pathToUse;
@@ -143,7 +132,8 @@ class MasterID {
 
   getAccountKey(): PrivateKey {
     if (this.#isType42) {
-      if (!this.#masterPrivateKey) throw new Error("Master private key not initialized");
+      if (!this.#masterPrivateKey)
+        throw new Error("Master private key not initialized");
       return this.#masterPrivateKey.deriveChild(
         this.#masterPrivateKey.toPublicKey(),
         this.#rootPath
@@ -176,7 +166,10 @@ class MasterID {
   }
 
   import(identity: Identity | OldIdentity): void {
-    this.bapId = "bapId" in identity ? identity.bapId : (identity as OldIdentity).identityKey;
+    this.bapId =
+      "bapId" in identity
+        ? identity.bapId
+        : (identity as OldIdentity).identityKey;
     this.#rootPath = identity.rootPath;
     this.rootAddress = identity.rootAddress;
     this.#previousPath = identity.previousPath;
