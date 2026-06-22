@@ -1,0 +1,16 @@
+#!/bin/sh
+# Pre-commit hook: enforce Biome lint before committing.
+#
+# Wired via `core.hooksPath = .githooks`, which the package.json "prepare"
+# script sets on `bun install`. This replaces the old hook that depended on the
+# uninstalled `pre-commit` npm package.
+#
+# Bypass in an emergency with: git commit --no-verify
+
+echo "pre-commit: running Biome lint..."
+if ! bun run lint; then
+	echo "" >&2
+	echo "pre-commit: Biome lint failed. Fix issues (try 'bun run lint:fix')" >&2
+	echo "            or bypass with 'git commit --no-verify'." >&2
+	exit 1
+fi

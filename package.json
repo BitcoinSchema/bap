@@ -40,6 +40,7 @@
     "format": "biome format . --write",
     "lint": "biome lint .",
     "lint:fix": "biome lint . --write",
+    "prepare": "git config core.hooksPath .githooks 2>/dev/null || true",
     "prepublishOnly": "bun run clean && bun run build"
   },
   "devDependencies": {
