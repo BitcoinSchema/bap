@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.3.4] - 2026-06-22
+
+### Added
+- Re-export the protocol Bitcom prefixes from the package root for consumer convenience: `AIP_BITCOM_ADDRESS`, `AIP_BITCOM_ADDRESS_HEX`, `BAP_BITCOM_ADDRESS`, `BAP_BITCOM_ADDRESS_HEX` (e.g. for building AIP signatures or BAP transactions). Previously these lived in `./constants` but were not exported from the package entry point.
+
 ## [0.3.3] - 2026-06-22
 
 ### Changed

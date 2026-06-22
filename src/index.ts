@@ -687,6 +687,14 @@ export class BAP {
 
 export { MasterID };
 export { bapIdFromAddress, bapIdFromPubkey } from "./utils";
+// Protocol prefixes (Bitcom addresses) re-exported for consumer convenience —
+// e.g. building AIP signatures or BAP transactions.
+export {
+  AIP_BITCOM_ADDRESS,
+  AIP_BITCOM_ADDRESS_HEX,
+  BAP_BITCOM_ADDRESS,
+  BAP_BITCOM_ADDRESS_HEX,
+} from "./constants";
 export type {
   Attestation,
   BapAccountBackup,
