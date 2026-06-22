@@ -9,18 +9,39 @@
  *   - Config stores sentinel "se:bap-master" in rootPkEncrypted
  *   - Plaintext WIF never touches disk when Touch ID is active
  *
- * Powered by @1sat/vault (Secure Enclave hardware vault).
+ * Powered by the provider-based @1sat/vault (>=0.0.6): the platform-agnostic
+ * vault interface plus the macOS SecureEnclaveProvider from @1sat/wallet-mac.
  */
 
-import {
-  checkAvailability,
-  isSupported,
-  protectSecret,
-  removeSecret,
-  unlockSecret,
-} from "@1sat/vault";
+import { homedir } from "node:os";
+import { resolve } from "node:path";
+import { createVault, FileVaultStorage, type Vault } from "@1sat/vault";
+import { SecureEnclaveProvider } from "@1sat/wallet-mac";
 
 const LABEL = "bap-master";
+
+/** Directory where the Secure Enclave ciphertext entries are stored. */
+const VAULT_DIR = resolve(homedir(), ".secure-enclave-vault");
+
+let providerInstance: SecureEnclaveProvider | undefined;
+
+/** The macOS Secure Enclave provider (Touch ID prompt branded as "bap"). */
+function getProvider(): SecureEnclaveProvider {
+  if (!providerInstance) {
+    providerInstance = new SecureEnclaveProvider({ name: "bap" });
+  }
+  return providerInstance;
+}
+
+let vaultInstance: Vault | undefined;
+
+/** Build the Secure Enclave vault from the provider and on-disk storage. */
+function getVault(): Vault {
+  if (!vaultInstance) {
+    vaultInstance = createVault(getProvider(), new FileVaultStorage(VAULT_DIR));
+  }
+  return vaultInstance;
+}
 
 /**
  * Encrypt a WIF private key with the Secure Enclave.
@@ -29,7 +50,7 @@ const LABEL = "bap-master";
  * Returns the sentinel string "se:bap-master" to store in config.
  */
 export async function protectRootKey(wif: string): Promise<string> {
-  await protectSecret(LABEL, wif, { type: "bap-root" });
+  await getVault().protectSecret(LABEL, wif, { type: "bap-root" });
   return `se:${LABEL}`;
 }
 
@@ -47,7 +68,7 @@ export async function unlockRootKey(sentinel: string): Promise<string> {
     );
   }
   const label = sentinel.slice(3);
-  const { plaintext } = await unlockSecret(label);
+  const { plaintext } = await getVault().unlockSecret(label);
   return plaintext;
 }
 
@@ -57,7 +78,7 @@ export async function unlockRootKey(sentinel: string): Promise<string> {
  * The caller must replace rootPkEncrypted with rootPk before calling this.
  */
 export async function removeProtection(): Promise<void> {
-  await removeSecret(LABEL);
+  await getVault().removeSecret(LABEL);
 }
 
 /**
@@ -68,12 +89,13 @@ export async function getTouchIDStatus(hasEncryptedKey: boolean): Promise<{
   biometryType: string;
   protected: boolean;
 }> {
-  if (!isSupported()) {
+  const provider = getProvider();
+  if (!provider.isSupported()) {
     return { available: false, biometryType: "None", protected: false };
   }
-  const status = await checkAvailability();
+  const status = await provider.checkAvailability();
   return {
-    available: status.secureEnclave && status.biometryAvailable,
+    available: status.supported && status.biometryAvailable,
     biometryType: status.biometryType,
     protected: hasEncryptedKey,
   };
@@ -83,5 +105,5 @@ export async function getTouchIDStatus(hasEncryptedKey: boolean): Promise<{
  * Synchronous check for Secure Enclave support (macOS arm64).
  */
 export function isTouchIDSupported(): boolean {
-  return isSupported();
+  return getProvider().isSupported();
 }

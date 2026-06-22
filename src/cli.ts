@@ -192,7 +192,7 @@ const program = new Command();
 program
   .name("bap")
   .description("BAP - Bitcoin Attestation Protocol CLI")
-  .version("0.3.2");
+  .version("0.3.3");
 
 // Identity Management
 

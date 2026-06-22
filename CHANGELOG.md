@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.3.3] - 2026-06-22
+
+### Changed
+- **Migrated Touch ID to the provider-based `@1sat/vault` (>=0.0.6 architecture).** `@1sat/vault` `0.0.3` → `^0.0.8` (platform-agnostic vault interface) plus new `@1sat/wallet-mac` `^0.0.5` dependency (`SecureEnclaveProvider`), wired via `createVault(provider, FileVaultStorage)`. `trustedDependencies` updated from `@1sat/vault` to `@1sat/wallet-mac` (the package that now compiles the Secure Enclave binary on install). Vault entry location (`~/.secure-enclave-vault/bap-master.vault.json`) and the `se:bap-master` config sentinel are unchanged.
+
 ## [0.3.2] - 2026-06-12
 
 ### Added

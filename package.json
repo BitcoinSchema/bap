@@ -1,6 +1,6 @@
 {
   "name": "bsv-bap",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "BAP npm module",
   "repository": {
     "type": "git",
@@ -50,7 +50,8 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@1sat/vault": "0.0.3",
+    "@1sat/vault": "^0.0.8",
+    "@1sat/wallet-mac": "^0.0.5",
     "commander": "^14.0.3",
     "schema-dts": "^1.1.5"
   },
@@ -58,6 +59,6 @@
     "@bsv/sdk": "^2.0.1"
   },
   "trustedDependencies": [
-    "@1sat/vault"
+    "@1sat/wallet-mac"
   ]
 }
