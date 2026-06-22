@@ -17,7 +17,6 @@ import type {
   GetIdentityResponse,
 } from "./apiTypes";
 import {
-  AIP_BITCOM_ADDRESS,
   BAP_BITCOM_ADDRESS_HEX,
   BAP_SERVER,
   ENCRYPTION_PATH,

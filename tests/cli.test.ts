@@ -141,7 +141,7 @@ describe("CLI: create", () => {
 describe("CLI: list", () => {
   test("shows empty message when no identities", () => {
     // Create config dir but no identity file
-    const { stderr, exitCode } = run("list");
+    const { exitCode } = run("list");
     expect(exitCode).toBe(1);
   });
 
@@ -382,11 +382,8 @@ describe("CLI: id-from-address / id-from-pubkey", () => {
   });
 
   test("id-from-pubkey derives correct BAP ID", () => {
-    // Create identity and get its account pubkey
+    // Create identity first
     run("create");
-    const { stdout: infoOut } = run("info");
-    const bapIdLine = infoOut.split("\n").find((l) => l.includes("BAP ID:"));
-    const bapId = bapIdLine?.split("BAP ID:")[1]?.trim();
 
     // We can't easily test this without knowing the member pubkey,
     // but we can at least verify the command runs without error
@@ -439,7 +436,7 @@ describe("CLI: import 0.1.x backup formats", () => {
     // Create a BIP32 backup the way 0.1.x would have exported it
     const { BAP } = require("../src/index");
     const bap = new BAP(HDPrivateKey);
-    const id = bap.newId();
+    bap.newId();
     const backup = bap.exportForBackup("Legacy Backup");
 
     expect(backup.xprv).toBeTruthy();

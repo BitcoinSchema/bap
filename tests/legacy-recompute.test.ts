@@ -11,7 +11,7 @@
 import { describe, expect, test } from "bun:test";
 import { Utils as BSVUtils, Hash, HD, Mnemonic, PrivateKey } from "@bsv/sdk";
 import { BAP } from "../src/index";
-import { bapIdFromAddress, Utils } from "../src/utils";
+import { bapIdFromAddress } from "../src/utils";
 
 const ROOT_PATH = "bap:0";
 
