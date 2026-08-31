@@ -63,6 +63,7 @@ async function build() {
     ...commonConfig,
     outdir: "./dist",
     format: "cjs",
+    target: "node",
     naming: {
       entry: "index.cjs",
       chunk: "[name]-[hash].cjs",
