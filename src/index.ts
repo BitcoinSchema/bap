@@ -20,6 +20,7 @@ import {
   BAP_BITCOM_ADDRESS_HEX,
   BAP_SERVER,
   ENCRYPTION_PATH,
+  MAX_INT,
 } from "./constants";
 import type {
   Attestation,
@@ -30,7 +31,7 @@ import type {
   PathPrefix,
 } from "./interface";
 import { MasterID } from "./MasterID";
-import { deriveIdentity0Address, Utils } from "./utils";
+import { bapIdFromAddress, deriveIdentity0Address, Utils } from "./utils";
 
 const { toArray, toUTF8, toBase64, toHex } = BSVUtils;
 const { electrumEncrypt, electrumDecrypt } = ECIES;
@@ -41,8 +42,68 @@ type ParsedIdEntry = {
   bapId: string;
   rootPath: string;
   rootAddress: string;
+  currentPath: string;
+  previousPath: string;
   idSeed: string;
 };
+
+type ParsedIdsExport = {
+  entries: ParsedIdEntry[];
+  lastIdPath?: string;
+};
+
+type Bip32PathPart = {
+  hardened: boolean;
+  value: number;
+};
+
+const CANONICAL_UINT = /^(?:0|[1-9]\d*)$/;
+
+function requireNonEmptyString(value: unknown, field: string): string {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`Legacy entry has invalid ${field}`);
+  }
+  return value;
+}
+
+function parseBip32Path(path: string): Bip32PathPart[] | null {
+  const rawParts = path.split("/");
+  if (rawParts.length !== 7 || rawParts[0] !== "m") return null;
+
+  const parts: Bip32PathPart[] = [];
+  for (const rawPart of rawParts.slice(1)) {
+    const match = rawPart.match(/^((?:0|[1-9]\d*))('?)$/);
+    if (!match) return null;
+    const value = Number(match[1]);
+    if (!Number.isSafeInteger(value) || value > MAX_INT) return null;
+    parts.push({ value, hardened: match[2] === "'" });
+  }
+
+  if (
+    parts[0].value !== 424150 ||
+    !parts[0].hardened ||
+    parts[1].value !== 0 ||
+    !parts[1].hardened ||
+    parts[2].value !== 0 ||
+    !parts[2].hardened
+  ) {
+    return null;
+  }
+
+  return parts;
+}
+
+function isCanonicalBip32Cursor(path: string): boolean {
+  if (parseBip32Path(path)) return true;
+  const rawParts = path.split("/");
+  if (rawParts.length !== 4 || rawParts[0] !== "") return false;
+  return rawParts.slice(1).every((part) => {
+    const match = part.match(/^((?:0|[1-9]\d*))('?)$/);
+    if (!match) return false;
+    const value = Number(match[1]);
+    return Number.isSafeInteger(value) && value <= MAX_INT;
+  });
+}
 
 /** Backup format for Type 42 mode (rootPk-based) */
 export interface Type42MasterBackup {
@@ -154,14 +215,21 @@ export class BAP {
     if (this.#isType42) {
       if (!this.#masterPrivateKey)
         throw new Error("Master private key not initialized");
-      walletRoot = this.#masterPrivateKey.deriveChild(
-        this.#masterPrivateKey.toPublicKey(),
-        bapId.rootPath
-      );
+      let base = this.#masterPrivateKey;
+      if (bapId.idSeed) {
+        const seedHex = toHex(Hash.sha256(bapId.idSeed, "utf8"));
+        base = base.deriveChild(base.toPublicKey(), seedHex);
+      }
+      walletRoot = base.deriveChild(base.toPublicKey(), bapId.rootPath);
     } else {
       if (!this.#HDPrivateKey)
         throw new Error("HD private key not initialized");
-      walletRoot = this.#HDPrivateKey.derive(bapId.rootPath).privKey;
+      let baseHd = this.#HDPrivateKey;
+      if (bapId.idSeed) {
+        const seedHex = toHex(Hash.sha256(bapId.idSeed, "utf8"));
+        baseHd = baseHd.derive(Utils.getSigningPathFromHex(seedHex));
+      }
+      walletRoot = baseHd.derive(bapId.rootPath).privKey;
     }
 
     if (deriveIdentity0Address(walletRoot) !== bapId.rootAddress) {
@@ -204,59 +272,220 @@ export class BAP {
   /** Normalize an ids export (encrypted string, Identities object, or old array). */
   #parseIdsExport(
     idData: Identities | OldIdentity[] | string
-  ): ParsedIdEntry[] {
+  ): ParsedIdsExport {
     let parsed: unknown = idData;
     if (typeof parsed === "string") {
       parsed = JSON.parse(this.decrypt(parsed));
     }
-    const entries = Array.isArray(parsed)
-      ? (parsed as OldIdentity[])
-      : (parsed as Identities | undefined)?.ids;
+
+    const isOldArray = Array.isArray(parsed);
+    const entries = isOldArray
+      ? parsed
+      : (parsed as Partial<Identities> | null)?.ids;
     if (!Array.isArray(entries)) {
       throw new Error("Unrecognized identities format");
     }
-    return entries.map((entry) => ({
-      bapId:
-        ("bapId" in entry ? entry.bapId : (entry as OldIdentity).identityKey) ??
-        "",
-      rootPath: entry.rootPath,
-      rootAddress: entry.rootAddress,
-      idSeed: entry.idSeed ?? "",
-    }));
+
+    let lastIdPath: string | undefined;
+    if (!isOldArray) {
+      lastIdPath = requireNonEmptyString(
+        (parsed as Partial<Identities>).lastIdPath,
+        "lastIdPath"
+      );
+    }
+
+    return {
+      entries: entries.map((rawEntry) => {
+        if (!rawEntry || typeof rawEntry !== "object") {
+          throw new Error("Legacy entry must be an object");
+        }
+        const entry = rawEntry as Partial<Identity & OldIdentity>;
+        const bapId =
+          "bapId" in entry
+            ? entry.bapId
+            : (entry as Partial<OldIdentity>).identityKey;
+        const idSeed = entry.idSeed;
+        if (idSeed !== undefined && typeof idSeed !== "string") {
+          throw new Error("Legacy entry has invalid idSeed");
+        }
+        if (!isOldArray && idSeed === undefined) {
+          throw new Error("Legacy entry has invalid idSeed");
+        }
+
+        return {
+          bapId: requireNonEmptyString(bapId, "bapId"),
+          rootPath: requireNonEmptyString(entry.rootPath, "rootPath"),
+          rootAddress: requireNonEmptyString(entry.rootAddress, "rootAddress"),
+          currentPath: requireNonEmptyString(entry.currentPath, "currentPath"),
+          previousPath: requireNonEmptyString(
+            entry.previousPath,
+            "previousPath"
+          ),
+          // idSeed was optional only in the oldest array schema.
+          idSeed: idSeed ?? "",
+        };
+      }),
+      lastIdPath,
+    };
+  }
+
+  #validateType42Lineage(entry: ParsedIdEntry): void {
+    const rootMatch = entry.rootPath.match(/^bap:((?:0|[1-9]\d*))$/);
+    if (!rootMatch || !Number.isSafeInteger(Number(rootMatch[1]))) {
+      throw new Error("Legacy entry has invalid Type 42 rootPath");
+    }
+
+    if (entry.currentPath === entry.rootPath) {
+      if (entry.previousPath !== entry.rootPath) {
+        throw new Error("Legacy entry has an impossible Type 42 lineage");
+      }
+      return;
+    }
+
+    const identityIndex = rootMatch[1];
+    const numericRotationStart = BigInt(identityIndex) + 1n;
+    const parseRotation = (
+      path: string
+    ): { namespace: "numeric" | "scoped"; rotation: bigint } | null => {
+      if (CANONICAL_UINT.test(path) && path !== "0") {
+        return { namespace: "numeric", rotation: BigInt(path) };
+      }
+      const scoped = path.match(
+        new RegExp(`^bap:${identityIndex}:((?:0|[1-9]\\d*))$`)
+      );
+      if (!scoped || scoped[1] === "0") return null;
+      return { namespace: "scoped", rotation: BigInt(scoped[1]) };
+    };
+
+    const current = parseRotation(entry.currentPath);
+    if (!current) {
+      throw new Error("Legacy entry has invalid Type 42 currentPath");
+    }
+
+    if (entry.previousPath === entry.rootPath) {
+      // Before the scoped bap:N:R format, getNextPath("bap:N") stripped
+      // non-digits and incremented N, producing the bare string "N+1".
+      const expectedFirstRotation =
+        current.namespace === "numeric" ? numericRotationStart : 1n;
+      if (current.rotation !== expectedFirstRotation) {
+        throw new Error("Legacy entry has an impossible Type 42 lineage");
+      }
+      return;
+    }
+
+    const previous = parseRotation(entry.previousPath);
+    if (
+      !previous ||
+      previous.namespace !== current.namespace ||
+      (previous.namespace === "numeric" &&
+        previous.rotation < numericRotationStart) ||
+      current.rotation !== previous.rotation + 1n
+    ) {
+      throw new Error("Legacy entry has an impossible Type 42 lineage");
+    }
+  }
+
+  #validateBip32Lineage(entry: ParsedIdEntry): void {
+    const root = parseBip32Path(entry.rootPath);
+    const previous = parseBip32Path(entry.previousPath);
+    const current = parseBip32Path(entry.currentPath);
+    if (!root || !previous || !current) {
+      throw new Error("Legacy entry has an invalid BIP32 lineage path");
+    }
+
+    if (entry.currentPath === entry.rootPath) {
+      if (entry.previousPath !== entry.rootPath) {
+        throw new Error("Legacy entry has an impossible BIP32 lineage");
+      }
+      return;
+    }
+
+    const sameIdentityNamespace = (candidate: Bip32PathPart[]): boolean =>
+      root
+        .slice(0, 5)
+        .every(
+          (part, index) =>
+            part.value === candidate[index].value &&
+            part.hardened === candidate[index].hardened
+        ) && root[5].hardened === candidate[5].hardened;
+
+    if (
+      !sameIdentityNamespace(previous) ||
+      !sameIdentityNamespace(current) ||
+      previous[5].value < root[5].value ||
+      current[5].value !== previous[5].value + 1
+    ) {
+      throw new Error("Legacy entry has an impossible BIP32 lineage");
+    }
+  }
+
+  #validateLegacyEntry(entry: ParsedIdEntry): void {
+    if (this.#isType42) {
+      this.#validateType42Lineage(entry);
+    } else {
+      this.#validateBip32Lineage(entry);
+    }
+
+    if (
+      this.#legacyRootAddress(entry.rootPath, entry.idSeed) !==
+      entry.rootAddress
+    ) {
+      throw new Error("ID does not belong to this private key");
+    }
+    if (bapIdFromAddress(entry.rootAddress) !== entry.bapId) {
+      throw new Error("Legacy entry bapId does not match rootAddress");
+    }
+  }
+
+  #validateLegacyCursor(lastIdPath: string | undefined): void {
+    if (lastIdPath === undefined) return;
+    if (this.#isType42) {
+      if (!/^bap:(?:0|[1-9]\d*)$/.test(lastIdPath)) {
+        throw new Error("Legacy export has invalid Type 42 lastIdPath");
+      }
+      return;
+    }
+    if (!isCanonicalBip32Cursor(lastIdPath)) {
+      throw new Error("Legacy export has invalid BIP32 lastIdPath");
+    }
   }
 
   /**
    * Check whether an ids export was produced by bsv-bap <= 0.2.x with this
    * key: every entry's stored rootAddress must match the legacy derivation
-   * of its rootPath. Returns false for current-format exports and for
-   * exports that belong to a different key.
+   * of its rootPath, its bapId must match that address, and its lineage must
+   * be locally well-formed. Returns false for current-format exports, exports
+   * that belong to a different key, and malformed lineage metadata.
+   *
+   * currentPath/previousPath were not signed in the legacy backup format.
+   * Local validation can reject impossible transitions, but cannot prove the
+   * authenticity of an otherwise valid substituted transition.
    */
   isLegacyIdsExport(idData: Identities | OldIdentity[] | string): boolean {
-    let entries: ParsedIdEntry[];
     try {
-      entries = this.#parseIdsExport(idData);
+      const parsed = this.#parseIdsExport(idData);
+      this.#validateLegacyCursor(parsed.lastIdPath);
+      return (
+        parsed.entries.length > 0 &&
+        parsed.entries.every((entry) => {
+          this.#validateLegacyEntry(entry);
+          return true;
+        })
+      );
     } catch {
       return false;
     }
-    return (
-      entries.length > 0 &&
-      entries.every(
-        (entry) =>
-          entry.rootPath &&
-          entry.rootAddress &&
-          this.#legacyRootAddress(entry.rootPath, entry.idSeed) ===
-            entry.rootAddress
-      )
-    );
   }
 
   /**
    * Recompute identities from a legacy (<= 0.2.x) export under the current
    * BRC-100 identity-0 derivation. Each entry is verified against the
    * legacy formula first — proving the export belongs to this key — then
-   * re-derived at its original rootPath/idSeed. The underlying keys are
-   * unchanged; the bapIds are NEW. Callers must re-export (`exportIds`)
-   * and reissue the backup file; the legacy export is obsolete after this.
+   * re-derived at its original rootPath/idSeed. The key container, rootPath,
+   * idSeed, currentPath, and previousPath are unchanged byte-for-byte; only
+   * rootAddress/bapId adopt the current public derivation. No rotation or key
+   * conversion occurs. Callers must re-export (`exportIds`) and reissue the
+   * backup file; the legacy export is obsolete after this.
    *
    * @throws if any entry does not match the legacy derivation either
    * (wrong key or unrecognized format) — never silently accepts.
@@ -264,38 +493,77 @@ export class BAP {
   recomputeLegacyIds(
     idData: Identities | OldIdentity[] | string
   ): LegacyIdRecompute[] {
-    const entries = this.#parseIdsExport(idData);
-    const recomputed: LegacyIdRecompute[] = [];
+    const parsed = this.#parseIdsExport(idData);
+    if (parsed.entries.length === 0) {
+      throw new Error("Legacy export contains no identities");
+    }
+    this.#validateLegacyCursor(parsed.lastIdPath);
+    for (const entry of parsed.entries) this.#validateLegacyEntry(entry);
 
-    for (const entry of entries) {
-      if (!entry.rootPath) {
-        throw new Error("Legacy entry is missing rootPath; cannot recompute");
-      }
-      if (
-        this.#legacyRootAddress(entry.rootPath, entry.idSeed) !==
-        entry.rootAddress
-      ) {
-        throw new Error("ID does not belong to this private key");
+    const staged = parsed.entries.map((entry) => {
+      let identity: MasterID;
+      if (this.#isType42) {
+        if (!this.#masterPrivateKey)
+          throw new Error("Type 42 parameters not initialized");
+        identity = new MasterID(
+          { rootPk: this.#masterPrivateKey },
+          entry.idSeed
+        );
+      } else {
+        if (!this.#HDPrivateKey)
+          throw new Error("HD private key not initialized");
+        identity = new MasterID(this.#HDPrivateKey, entry.idSeed);
       }
 
-      const identity = this.newId(entry.rootPath, entry.idSeed);
-      recomputed.push({
-        oldBapId: entry.bapId,
-        newBapId: identity.bapId,
+      identity.rootPath = entry.rootPath;
+      const newBapId = identity.bapId;
+      const newRootAddress = identity.rootAddress;
+      identity.import({
+        bapId: newBapId,
         rootPath: entry.rootPath,
+        rootAddress: newRootAddress,
+        currentPath: entry.currentPath,
+        previousPath: entry.previousPath,
+        idSeed: entry.idSeed,
+        lastIdPath: "",
       });
+
+      return {
+        identity,
+        mapping: {
+          oldBapId: entry.bapId,
+          newBapId,
+          rootPath: entry.rootPath,
+        } satisfies LegacyIdRecompute,
+      };
+    });
+
+    const stagedIds = new Set<string>();
+    for (const { identity } of staged) {
+      if (stagedIds.has(identity.bapId) || this.#ids[identity.bapId]) {
+        throw new Error("Legacy export contains a duplicate identity");
+      }
+      stagedIds.add(identity.bapId);
+    }
+
+    for (const { identity } of staged) {
+      this.#ids[identity.bapId] = identity;
 
       // Keep the Type 42 counter monotonic so a later argument-less newId()
       // cannot collide with a recomputed bap:N identity.
-      if (this.#isType42 && entry.rootPath.startsWith("bap:")) {
-        const counter = Number.parseInt(entry.rootPath.split(":")[1], 10);
-        if (!Number.isNaN(counter)) {
-          this.#identityCounter = Math.max(this.#identityCounter, counter + 1);
-        }
+      if (this.#isType42) {
+        const counter = Number(identity.rootPath.split(":")[1]);
+        this.#identityCounter = Math.max(this.#identityCounter, counter + 1);
       }
     }
 
-    return recomputed;
+    // Old array exports predate the container cursor. Preserve a real cursor
+    // when one exists; otherwise retain the prior behavior of using the final
+    // identity's root path for subsequent identity creation.
+    this.#lastIdPath =
+      parsed.lastIdPath ?? staged[staged.length - 1].identity.rootPath;
+
+    return staged.map(({ mapping }) => mapping);
   }
 
   listIds(): string[] {
@@ -686,7 +954,6 @@ export class BAP {
 }
 
 export { MasterID };
-export { bapIdFromAddress, bapIdFromPubkey } from "./utils";
 // Protocol prefixes (Bitcom addresses) re-exported for consumer convenience —
 // e.g. building AIP signatures or BAP transactions.
 export {
@@ -695,6 +962,7 @@ export {
   BAP_BITCOM_ADDRESS,
   BAP_BITCOM_ADDRESS_HEX,
 } from "./constants";
+export { bapIdFromAddress, bapIdFromPubkey } from "./utils";
 export type {
   Attestation,
   BapAccountBackup,
