@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.3.6] - 2026-08-31
+
+### Fixed
+- Published tarballs now include the declared CommonJS bundle and source map. The CJS build targets Node, and the release gate packs and unpacks the package, verifies every declared export target, and smoke-loads the real `BAP` and `MasterID` APIs through both CommonJS and ESM.
+
 ## [0.3.5] - 2026-08-31
 
 ### Fixed
