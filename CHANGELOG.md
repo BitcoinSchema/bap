@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [0.3.5] - 2026-08-31
 
 ### Fixed
 - Legacy pre-0.3 metadata reissue now preserves validated `currentPath` and `previousPath` exactly for both Type 42 and BIP32/xprv backups instead of resetting advanced lineage through `newId()`. Reissue remains offline and key-preserving: only the BRC-100-aligned public `rootAddress`/`bapId` change. Malformed paths, impossible lineage transitions, and mismatched stored BAP IDs fail closed before any identity is imported.
