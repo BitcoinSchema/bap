@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.3.7] - 2026-09-01
+
+### Fixed
+- Restored the exact `0.3.4` library implementation and behavior. This release reverts the unauthorized `0.3.5`/`0.3.6` lineage changes and does not add key migration, key rotation, identity reissue, or backup conversion behavior.
+
 ## [0.3.4] - 2026-06-22
 
 ### Added
