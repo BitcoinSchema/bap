@@ -368,36 +368,6 @@ bap.importIds(plain, false);
 const backup = bap.exportForBackup(label?, xprv?, mnemonic?);
 ```
 
-#### Reissuing a pre-0.3 backup
-
-Version 0.3 intentionally changed the public BAP ID calculation to the
-BRC-100-aligned `identity-0` derivation. A verified pre-0.3 identity export can
-be loaded and reissued without changing its private key material or rotation
-history:
-
-```typescript
-if (bap.isLegacyIdsExport(legacyIds)) {
-  const mapping = bap.recomputeLegacyIds(legacyIds);
-  const reissuedIds = bap.exportIds();
-
-  // mapping contains oldBapId -> newBapId for display or local bookkeeping.
-}
-```
-
-`recomputeLegacyIds` preserves the existing `rootPk` or `xprv` container and
-each identity's `rootPath`, `idSeed`, `previousPath`, and `currentPath` exactly.
-Only `rootAddress` and `bapId` are recalculated. It does not rotate a key,
-derive replacement private key material, convert one key container into
-another, publish anything on-chain, or rebind an external account.
-
-The method verifies that the stored legacy root address and BAP ID match the
-provided key, then checks canonical path syntax and a possible
-predecessor-to-current transition. Legacy backups did not sign
-`previousPath`/`currentPath`, so local validation cannot prove that an otherwise
-well-formed lineage was never substituted. Corroborating lineage with on-chain
-history is a separate application-level check and is not performed by this
-offline library method.
-
 #### Master-Level Crypto
 
 ```typescript

@@ -25,8 +25,6 @@ class BAP {
   exportId(idKey: string, encrypted?: boolean): string | Identities
   importIds(identities: string | Identities, encrypted?: boolean): void
   importOldIds(idData: OldIdentity[]): void
-  isLegacyIdsExport(ids: string | Identities | OldIdentity[]): boolean
-  recomputeLegacyIds(ids: string | Identities | OldIdentity[]): LegacyIdRecompute[]
   exportForBackup(label?: string, xprv?: string, mnemonic?: string): Type42MasterBackup | Bip32MasterBackup
 
   // Master-level crypto
@@ -49,12 +47,6 @@ class BAP {
   getHdPublicKey(childPath?: string): string  // BIP32 only
 }
 ```
-
-`recomputeLegacyIds` is an offline metadata reissue for verified pre-0.3
-exports. It preserves the key container, `rootPath`, `idSeed`, `previousPath`,
-and `currentPath`; only the BRC-100-aligned public `rootAddress`/`bapId` change.
-It validates locally possible lineage transitions, but legacy lineage fields
-were not signed and therefore cannot be authenticated from the backup alone.
 
 ## MasterID Class
 

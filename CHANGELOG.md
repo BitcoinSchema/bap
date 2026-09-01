@@ -1,15 +1,5 @@
 # Changelog
 
-## [0.3.6] - 2026-08-31
-
-### Fixed
-- Published tarballs now include the declared CommonJS bundle and source map. The CJS build targets Node, and the release gate packs and unpacks the package, verifies every declared export target, and smoke-loads the real `BAP` and `MasterID` APIs through both CommonJS and ESM.
-
-## [0.3.5] - 2026-08-31
-
-### Fixed
-- Legacy pre-0.3 metadata reissue now preserves validated `currentPath` and `previousPath` exactly for both Type 42 and BIP32/xprv backups instead of resetting advanced lineage through `newId()`. Reissue remains offline and key-preserving: only the BRC-100-aligned public `rootAddress`/`bapId` change. Malformed paths, impossible lineage transitions, and mismatched stored BAP IDs fail closed before any identity is imported.
-
 ## [0.3.4] - 2026-06-22
 
 ### Added
