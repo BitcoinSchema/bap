@@ -1,6 +1,6 @@
 {
   "name": "bsv-bap",
-  "version": "0.3.6",
+  "version": "0.3.4",
   "description": "BAP npm module",
   "repository": {
     "type": "git",
@@ -25,8 +25,6 @@
   "files": [
     "dist/*.js",
     "dist/*.js.map",
-    "dist/*.cjs",
-    "dist/*.cjs.map",
     "dist/*.d.ts",
     "src/cli.ts",
     "src/touchid.ts",
@@ -43,8 +41,7 @@
     "lint": "biome lint .",
     "lint:fix": "biome lint . --write",
     "prepare": "git config core.hooksPath .githooks 2>/dev/null || true",
-    "check:package-exports": "bun run build && bun run scripts/check-package-exports.ts",
-    "prepublishOnly": "bun run check:package-exports"
+    "prepublishOnly": "bun run clean && bun run build"
   },
   "devDependencies": {
     "@biomejs/biome": "2.0.0",
