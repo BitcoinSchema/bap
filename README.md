@@ -5,6 +5,8 @@
 [![npm version](https://badge.fury.io/js/bsv-bap.svg)](https://badge.fury.io/js/bsv-bap)
 [![License](https://img.shields.io/badge/license-Open%20BSV-blue.svg)](LICENSE)
 
+> **0.4 is not shipped.** This package is `bsv-bap` **0.3.7**. A clean-break 0.4 is being planned with **no backward compatibility** shim, wrapper, or alias layer. Maintainers: do not release 0.4 while **attestation lookup** by hash and attestation transaction **overlay validity** remain **release-blocking** (no public replacement today). See the parity ledger: [MIGRATION-0.4.md](MIGRATION-0.4.md). The rest of this README is the current 0.3.7 usage guide.
+
 ## Abstract
 
 The Bitcoin Attestation Protocol (BAP) establishes a cryptographic system for creating, managing, and verifying digital identities directly on the Bitcoin blockchain. By treating Bitcoin keypairs as the fundamental identity primitive, BAP eliminates traditional authentication intermediaries while providing mathematical guarantees of identity ownership, attestation validity, and data sovereignty.
@@ -256,6 +258,8 @@ cat note.enc | xargs bap decrypt
 ```
 
 ## Migration from 0.1.x
+
+This section is the 0.1 → 0.2/0.3.7 path for the **current** package. It is not a 0.4 guide. For the planned clean-break 0.4 ledger (including release-blocking attestation lookup and overlay validity), see [MIGRATION-0.4.md](MIGRATION-0.4.md).
 
 ### Breaking Changes
 
